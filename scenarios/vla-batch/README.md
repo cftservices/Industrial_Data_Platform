@@ -226,6 +226,23 @@ predictive half of the Solve story, complementing the reactive
 under-cook/viscosity Solve from fase 0. A `POST /equipment/{id}/cip` clears the
 counter, the Dirty flag and any open alerts, and the line is available again.
 
+**The refusal is self-explaining.** `POST /batches` and `POST /orders/{id}/batches`
+answer `400` with a structured `detail` (`CipRequired`, same shape as the scan
+rejections) instead of a bare string, so an operator never sees just a status code:
+
+```json
+{"detail": {
+  "message": "cook-unit-01 is Dirty: 4 of max 4 batches since the last CIP. Clean cook-unit-01 (CIP) before starting a new batch.",
+  "reason": "cip_required", "equipment_id": "cook-unit-01",
+  "batches_since_cip": 4, "limit": 4, "last_cip_at": null,
+  "action": {"label": "Run CIP on cook-unit-01", "method": "POST",
+             "path": "/api/v1/equipment/cook-unit-01/cip"}}}
+```
+
+The dashboard renders this as a red alert under the order list (message + last
+CIP) with a **Run CIP on cook-unit-01** button; pressing it performs the CIP and
+retries the batch. Clients that only read `detail.message` keep working.
+
 **OEE-light** (`GET /oee`) is the classic one-liner — `OEE = Availability ×
 Performance × Quality` — computed per equipment from the state-history
 durations (availability), the cook-unit heat-up trend vs its clean baseline

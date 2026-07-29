@@ -37,3 +37,24 @@ def consume(db, events: Events, material_id: str, qty: float,
 def produce(db, events: Events, material_id: str, qty: float,
             batch_id: Optional[str]) -> Optional[float]:
     return _mutate(db, events, material_id, abs(float(qty)), batch_id, "production")
+
+
+def receive(db, events: Events, material_id: str, qty: float,
+            lot_no: Optional[str] = None,
+            operator_id: Optional[str] = None) -> Optional[float]:
+    """Goods receipt: raw material delivered into stock.
+
+    Without this there is no way back up — consumption only ever subtracts, so
+    a demo that keeps running drives every ingredient negative. Booked as its
+    own `kind` so a receipt is distinguishable from produced finished goods.
+    """
+    qty = abs(float(qty))
+    if qty <= 0:
+        raise ValueError("receipt qty must be > 0")
+    if db.dw_materials.find_one({"material_id": material_id}) is None:
+        raise ValueError(f"unknown material_id {material_id!r}")
+    after = _mutate(db, events, material_id, qty, None, "receipt")
+    events(None, "goods_receipt", {"material_id": material_id, "qty": qty,
+                                   "lot_no": lot_no, "operator_id": operator_id,
+                                   "stock_qty": after})
+    return after

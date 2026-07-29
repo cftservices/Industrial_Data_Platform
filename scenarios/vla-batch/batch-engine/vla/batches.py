@@ -95,11 +95,12 @@ class BatchRunner:
             raise ValueError(f"recipe {recipe_id!r} is not released (status={status})")
 
         # CIP gate (PR-29): cook-unit-01 must be clean before a new batch.
-        # NOTE: PR-code intentionally omitted from the message — it is an
+        # The message + structured detail live in CipRequired (equipment.py):
+        # it names the counter, the limit and the CIP action that clears it.
+        # NOTE: PR-code intentionally omitted from the message, it is an
         # internal traceability ref, not customer-facing text.
-        if self.equipment is not None and self.equipment.is_dirty("cook-unit-01"):
-            raise ValueError(f"cook-unit-01 is Dirty — CIP cleaning required "
-                             f"before a new batch")
+        if self.equipment is not None:
+            self.equipment.require_clean("cook-unit-01")
 
         # Production order (PR-24): explicit order_id must exist and be open;
         # without one, an implicit order is created when a manager is wired.
@@ -779,6 +780,10 @@ class BatchRunner:
                 "started_at": b.get("started_at"),
                 "verdict": b.get("verdict"),
                 "packs_total": b.get("packs_total", 0),
+                # order_id + planned_L let the dashboard group batches per order
+                # (and find the running batch) without an N+1 fetch per batch.
+                "order_id": b.get("order_id"),
+                "planned_L": b.get("planned_L"),
             })
         return out
 

@@ -51,6 +51,18 @@ services:
     environment:
       OPCUA_ENDPOINT: "opc.tcp://0.0.0.0:4840/DairyWorks"
       FACTORY_MODEL: /model/isa95-vla.json
+      # ── demo-tempo ────────────────────────────────────────────────────────
+      # Elke processtap duurt hiermee ~30s, een hele batch ~120s (was ~86s met
+      # een scheve verdeling: doseren 2.4s tegenover koken 60s).
+      # hold_sec blijft bewust 300 PROCES-seconden (viscositeitsformule +
+      # sample-spec + EBR-contract); we vertragen via TIME_SCALE.
+      # Rates zijn afgeleid als: hoeveelheid / (30s * TIME_SCALE).
+      # Aanpassen kost alleen `up -d vla-factory`, geen rebuild.
+      TIME_SCALE: "15.0"          # proces-seconden per echte seconde (was 6.0)
+      DOSE_RATE_KG_S: "13.0"      # 5850 kg / 450 proces-s -> 30.0s
+      HEAT_RATE_C_S: "0.47"       # 71 C / 150 proces-s -> 10s opwarmen + 20s hold
+      COOL_RATE_C_S: "0.145"      # 65.5 C / 450 proces-s -> 30.2s
+      FILL_RATE_PACKS_S: "11.2"   # 5000 packs / 450 proces-s -> 30.0s
     volumes:
       - ./scenarios/vla-batch/factory-model:/model:ro
     mem_limit: 256m

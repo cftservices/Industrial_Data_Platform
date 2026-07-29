@@ -23,11 +23,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
-from vla import model as M
+from vla import inventory, model as M
 from vla.batches import BatchRunner
 from vla.bus import VlaBus
 from vla.db import get_db, seed_recipes
-from vla.equipment import EQUIPMENT_IDS, EquipmentMonitor
+from vla.equipment import EQUIPMENT_IDS, CipRequired, EquipmentMonitor
 from vla.handling import HandlingUnitManager
 from vla.opcua_control import OpcuaControl
 from vla.orders import OrderManager
@@ -141,6 +141,12 @@ class CipRequest(BaseModel):
     operator_id: str | None = None
 
 
+class GoodsReceipt(BaseModel):
+    qty: float
+    lot_no: str | None = None
+    operator_id: str | None = None
+
+
 def _runner() -> BatchRunner:
     runner = STATE.get("runner")
     if runner is None:
@@ -175,8 +181,17 @@ def _scan_call(fn, *args, **kw):
     except ScanRejected as e:
         code = 404 if e.reason == "unknown" else 409
         raise HTTPException(code, {"message": str(e), "reason": e.reason})
+    except CipRequired as e:
+        raise HTTPException(400, e.detail)
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+
+def _refused(e: ValueError) -> HTTPException:
+    """400 for a refused write. Gate errors (CipRequired) carry a structured
+    detail with the reason + the action that clears the block; every other
+    ValueError stays a plain-string detail."""
+    return HTTPException(400, getattr(e, "detail", str(e)))
 
 
 @app.on_event("startup")
@@ -275,6 +290,85 @@ def list_materials():
     return db.dw_materials.find({})
 
 
+@app.post(f"{API}/materials/{{material_id}}/receipt")
+def material_receipt(material_id: str, body: GoodsReceipt):
+    """Goods receipt — book delivered raw material into stock.
+
+    Consumption is the only stock movement the demo had, so ingredients went
+    negative once more was dosed than the seed held. This is the way back up.
+    """
+    db = STATE.get("db")
+    if db is None:
+        raise HTTPException(503, "engine not initialized")
+    try:
+        after = inventory.receive(db, _runner()._event, material_id,
+                                  body.qty, body.lot_no, body.operator_id)
+    except ValueError as e:
+        raise _refused(e)
+    return {"material_id": material_id, "received": body.qty, "stock_qty": after}
+
+
+@app.get(f"{API}/inventory")
+def inventory_overview(order_id: str | None = Query(default=None)):
+    # NOTE: not named `inventory` — that would shadow the `vla.inventory` module
+    # import at module level and break material_receipt() above.
+    """Stock + consumption + production per material.
+
+    Aggregated from dw_doses (what went in) and dw_production (what came out),
+    joined onto the dw_materials master for stock_qty / reorder_level. With
+    ?order_id= the consumption is limited to that order's batches.
+    """
+    db = STATE.get("db")
+    if db is None:
+        raise HTTPException(503, "engine not initialized")
+
+    scope: set | None = None
+    if order_id:
+        scope = {b["batch_id"] for b in db.dw_batches.find({"order_id": order_id})}
+
+    consumed: dict[str, float] = {}
+    dose_batches: dict[str, set] = {}
+    for d in db.dw_doses.find({}):
+        if scope is not None and d.get("batch_id") not in scope:
+            continue
+        mid = d.get("material_id")
+        consumed[mid] = consumed.get(mid, 0.0) + float(d.get("qty_actual") or 0)
+        dose_batches.setdefault(mid, set()).add(d.get("batch_id"))
+
+    produced_packs = 0
+    produced_L = 0.0
+    for p in db.dw_production.find({}):
+        if scope is not None and p.get("batch_id") not in scope:
+            continue
+        produced_packs += p.get("packs") or 0
+        produced_L += (p.get("packs") or 0) * float(p.get("pack_size_L") or 1)
+
+    rows = []
+    for m in db.dw_materials.find({}):
+        mid = m.get("material_id")
+        is_fg = mid == M.FINISHED_GOOD_ID
+        stock = float(m.get("stock_qty") or 0)
+        reorder = float(m.get("reorder_level") or 0)
+        rows.append({
+            "material_id": mid,
+            "name": m.get("name"),
+            "uom": m.get("uom"),
+            "category": m.get("category"),
+            "stock_qty": stock,
+            "reorder_level": reorder,
+            "below_reorder": bool(reorder) and stock < reorder,
+            "stock_pct": round(100.0 * stock / reorder, 1) if reorder else None,
+            "is_finished_good": is_fg,
+            "consumed_total": round(consumed.get(mid, 0.0), 3),
+            "batches_count": len(dose_batches.get(mid, ())),
+            "produced_total": produced_packs if is_fg else 0,
+            "produced_L": round(produced_L, 1) if is_fg else 0.0,
+        })
+    rows.sort(key=lambda r: (r["is_finished_good"], -r["consumed_total"]))
+    return {"order_id": order_id, "materials": rows,
+            "produced_packs": produced_packs, "produced_L": round(produced_L, 1)}
+
+
 @app.get(f"{API}/batches")
 def list_batches():
     return _runner().list_batches()
@@ -287,7 +381,7 @@ def create_batch(body: CreateBatch):
     try:
         batch = runner.create_batch(body.recipe_id, body.planned_L, auto_start=auto)
     except ValueError as e:
-        raise HTTPException(400, str(e))
+        raise _refused(e)
     return {"batch_id": batch["batch_id"], "state": batch["state"],
             "order_id": batch.get("order_id"),
             "dose_setpoints": {d["material_id"]: d["qty_target"]
@@ -345,10 +439,12 @@ def list_orders():
 
 @app.get(f"{API}/orders/{{order_id}}")
 def get_order(order_id: str):
-    order = _orders().get_order(order_id)
-    if order is None:
+    # full detail: order + progress + its batches + ingredient roll-up, so the
+    # dashboard's order panel needs exactly one request
+    detail = _orders().order_detail(order_id)
+    if detail is None:
         raise HTTPException(404, f"order {order_id} not found")
-    return {**order, "progress": _orders().order_progress(order_id)}
+    return detail
 
 
 @app.post(f"{API}/orders/{{order_id}}/batches")
@@ -363,7 +459,7 @@ def create_order_batch(order_id: str, body: CreateOrderBatch):
                                     auto_start=auto, order_id=order_id,
                                     operator_id=body.operator_id)
     except ValueError as e:
-        raise HTTPException(400, str(e))
+        raise _refused(e)
     return {"batch_id": batch["batch_id"], "state": batch["state"],
             "order_id": order_id,
             "dose_setpoints": {d["material_id"]: d["qty_target"]

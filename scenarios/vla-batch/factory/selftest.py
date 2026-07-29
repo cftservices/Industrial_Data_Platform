@@ -26,7 +26,12 @@ MAX_TICKS = 20000
 
 
 def run_batch(fault: tuple[str, float] | None = None):
-    """Run one batch to COMPLETE. Returns (process, states_seen, ticks)."""
+    """Run one batch to COMPLETE.
+
+    Returns (process, states_seen, ticks, phase_ticks) where phase_ticks maps
+    each state to the number of ticks spent in it -- multiply by DT for the
+    real-time duration of that phase.
+    """
     p = VlaProcess()
     states_seen: list[str] = [p.state]  # capture IDLE at rest, before start
     rc = p.start_batch(RECIPE, batch_id="SELFTEST-001")
@@ -38,12 +43,24 @@ def run_batch(fault: tuple[str, float] | None = None):
         assert frc == 0, f"inject_fault refused rc={frc}"
 
     ticks = 0
+    phase_ticks: dict[str, int] = {}
     while p.state != COMPLETE and ticks < MAX_TICKS:
+        phase_ticks[p.state] = phase_ticks.get(p.state, 0) + 1
         p.tick(DT)
         if p.state != states_seen[-1]:
             states_seen.append(p.state)
         ticks += 1
-    return p, states_seen, ticks
+    return p, states_seen, ticks, phase_ticks
+
+
+def print_phase_timing(phase_ticks: dict[str, int]) -> None:
+    """Print the real-time duration of each phase -- the demo-tempo check."""
+    print("  phase timing (real seconds, DT=%.1f):" % DT)
+    for st in (DOSING, COOKING, COOLING, FILLING):
+        n = phase_ticks.get(st, 0)
+        print(f"    {st:<9} {n:>5} ticks  {n * DT:>6.1f}s")
+    total = sum(phase_ticks.values()) * DT
+    print(f"    {'TOTAL':<9} {'':>5}         {total:>6.1f}s")
 
 
 def check(label: str, ok: bool, detail: str = "") -> bool:
@@ -58,10 +75,11 @@ def main() -> int:
 
     # ---- 1. NORMAL batch ----------------------------------------------------
     print("\n-- normal batch --")
-    p, states, ticks = run_batch()
+    p, states, ticks, phase_ticks = run_batch()
 
     reached_complete = p.state == COMPLETE
     all_ok &= check("reaches COMPLETE", reached_complete, f"in {ticks} ticks (~{ticks*DT:.0f}s sim-real)")
+    print_phase_timing(phase_ticks)
 
     expected_order = [IDLE, DOSING, COOKING, COOLING, FILLING, COMPLETE]
     all_ok &= check("state walks all 6 phases in order", states == expected_order, " -> ".join(states))
@@ -85,7 +103,7 @@ def main() -> int:
 
     # ---- 2. cook_undertemp FAULT -------------------------------------------
     print("\n-- cook_undertemp fault (magnitude 1.0) --")
-    pf, states_f, ticks_f = run_batch(fault=("cook_undertemp", 1.0))
+    pf, states_f, ticks_f, _ = run_batch(fault=("cook_undertemp", 1.0))
 
     fault_complete = pf.state == COMPLETE
     all_ok &= check("faulted batch still reaches COMPLETE", fault_complete, f"in {ticks_f} ticks")

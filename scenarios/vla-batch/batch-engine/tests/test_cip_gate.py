@@ -3,7 +3,7 @@ import pytest
 
 from vla.db import get_db, seed_recipes
 from vla.batches import BatchRunner
-from vla.equipment import EquipmentMonitor, DIRTY_AFTER_BATCHES
+from vla.equipment import CipRequired, EquipmentMonitor, DIRTY_AFTER_BATCHES
 
 TELEM_OK = {"peak_cook_temp_C": 88.0, "hold_elapsed_sec": 300.0,
             "packs_total": 4980, "reject_count": 20}
@@ -27,6 +27,32 @@ def test_dirty_gate_blocks_and_cip_unblocks():
     assert b5["state"] == "IDLE"
     evs = [e["event_type"] for e in db.dw_batch_events.find({})]
     assert "cip_performed" in evs and "equipment_dirty" in evs
+
+
+def test_dirty_gate_message_is_actionable():
+    """The refusal must tell the operator what is blocked, why (counter vs
+    limit) and which action clears it — a bare '400' is not diagnosable."""
+    db = get_db(mongo_url=None)
+    seed_recipes(db)
+    mon = EquipmentMonitor(db, bus=None)
+    runner = BatchRunner(db, bus=None, rng=random.Random(42), equipment=mon)
+    for _ in range(DIRTY_AFTER_BATCHES):
+        b = runner.create_batch("chocolate-vla-1L", planned_L=5000)
+        runner.start_batch(b["batch_id"], telemetry=TELEM_OK)
+
+    with pytest.raises(CipRequired) as ei:
+        runner.create_batch("chocolate-vla-1L", planned_L=5000)
+    d = ei.value.detail
+    assert d["message"] == str(ei.value)
+    assert d["reason"] == "cip_required"
+    assert d["equipment_id"] == "cook-unit-01"
+    assert d["batches_since_cip"] == DIRTY_AFTER_BATCHES
+    assert d["limit"] == DIRTY_AFTER_BATCHES
+    assert d["last_cip_at"] is None            # never cleaned in this run
+    assert d["action"]["path"] == "/api/v1/equipment/cook-unit-01/cip"
+    # the message carries the numbers and the way out, in plain language
+    assert "cook-unit-01" in d["message"] and "Dirty" in d["message"]
+    assert str(DIRTY_AFTER_BATCHES) in d["message"] and "CIP" in d["message"]
 
 
 def test_allocated_state_written_on_create():

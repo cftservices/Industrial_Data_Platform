@@ -18,16 +18,31 @@ Contract references (vla-build-contract.md):
         g = clamp((peak_temp-70)/(88-70),0,1) * clamp(hold_elapsed/hold_sec,0,1)
         end_viscosity_cP = 30 + g*230
   - Fault cook_undertemp caps the peak cook temperature -> low g -> viscosity < 150.
-  - Demo time: a full batch runs in ~2-4 minutes (time acceleration).
+  - Demo time: time-accelerated. Tunable per deployment via the TIME_SCALE /
+    *_RATE_* environment variables (see below); the deployed setting gives
+    ~30s per phase and ~2 min per batch.
 """
 
 from __future__ import annotations
 
+import os
 import time
 
 
 def clamp(x: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, x))
+
+
+def _envf(name: str, default: float) -> float:
+    """Read a float tuning constant from the environment, falling back to `default`.
+
+    Defaults are the original hard-coded values, so an unconfigured container (and
+    every offline test) behaves exactly as before.
+    """
+    try:
+        return float(os.environ.get(name) or default)
+    except ValueError:
+        return float(default)
 
 
 # --- batch states ---
@@ -60,18 +75,26 @@ GEL_TEMP_REF = 88.0        # full-temp reference (== recipe cook setpoint)
 VISC_BASE_cP = 30.0        # raw (ungelatinised) viscosity
 VISC_GAIN_cP = 230.0       # gelatinisation contribution -> ~260 cP at full gel
 
-# --- demo-time acceleration ---
-# Real cook hold_sec is 300s. To keep a full batch to ~2-4 min real time we run the
-# process clock much faster than wall time. TIME_SCALE seconds of process time pass
-# per second of tick dt. With hold_sec=300 and TIME_SCALE=6 the cook hold alone is
-# ~50s, plus dosing/heat-up/cooling/filling -> ~2.5-3.5 min total.
-TIME_SCALE = 6.0
+# --- demo-time acceleration (all overridable via environment) ---
+# Real cook hold_sec is 300s. To keep a batch watchable we run the process clock
+# faster than wall time: TIME_SCALE seconds of process time pass per second of
+# tick dt. hold_sec stays 300 process-seconds -- it feeds the viscosity formula,
+# the sample spec (batches.py) and the EBR contract, so it must not be lowered.
+# Slowing the demo down is therefore done by raising TIME_SCALE and deriving the
+# rates from a desired phase duration:
+#
+#     rate = amount / (phase_seconds * TIME_SCALE)
+#
+# Deployed values (docker-compose.vla.yml) give ~30s per phase, ~120s per batch:
+#   TIME_SCALE=15  DOSE=13.0  HEAT=0.47  COOL=0.145  FILL=13.0
+# The defaults below are the original fast values (~86s per batch).
+TIME_SCALE = _envf("TIME_SCALE", 6.0)
 
 # process rates (in *process* seconds)
-DOSE_RATE_KG_S = 400.0     # kg dosed per process-second (total across materials)
-HEAT_RATE_C_S = 1.2        # cook heat-up degrees C per process-second
-COOL_RATE_C_S = 1.5        # cooling degrees C per process-second
-FILL_RATE_PACKS_S = 60.0   # 1L packs filled per process-second
+DOSE_RATE_KG_S = _envf("DOSE_RATE_KG_S", 400.0)      # kg dosed per process-second (total)
+HEAT_RATE_C_S = _envf("HEAT_RATE_C_S", 1.2)          # cook heat-up degrees C per process-second
+COOL_RATE_C_S = _envf("COOL_RATE_C_S", 1.5)          # cooling degrees C per process-second
+FILL_RATE_PACKS_S = _envf("FILL_RATE_PACKS_S", 60.0)  # 1L packs filled per process-second
 AGITATOR_DEFAULT_RPM = 60.0
 
 AMBIENT_C = 20.0
@@ -96,6 +119,9 @@ class VlaProcess:
 
         # --- process-tank-01 (mixing) ---
         self.mix_level_L: float = 0.0
+        # specified batch yield in litres (recipe base_L); the filler works off
+        # this, not off the dosed mass -- see _tick_dosing
+        self.batch_volume_L: float = 0.0
         self.mix_temp_C: float = AMBIENT_C
         self.agitator_rpm: float = 0.0
         self.agitator_setpoint_rpm: float = AGITATOR_DEFAULT_RPM
@@ -119,6 +145,9 @@ class VlaProcess:
         self.packs_total: int = 0
         self.reject_count: int = 0
         self.pack_size_L: float = PACK_SIZE_L
+        # fractional pack accumulator: keeps the fill rate exact regardless of
+        # TICK_INTERVAL instead of rounding per tick (see _tick_filling)
+        self._packs_f: float = 0.0
 
         # --- faults ---
         # active_fault: {"id": str, "magnitude": float}
@@ -150,6 +179,7 @@ class VlaProcess:
         # load recipe setpoints
         self.dose_setpoint_kg = dict(recipe["doses_kg"])
         self.dose_actual_kg = {k: 0.0 for k in self.dose_setpoint_kg}
+        self.batch_volume_L = float(recipe.get("base_L") or 0.0)
         self.cook_setpoint_C = float(recipe["cook_setpoint_C"])
         self.hold_sec = float(recipe["hold_sec"])
         self.cool_target_C = float(recipe["cool_target_C"])
@@ -164,6 +194,7 @@ class VlaProcess:
         self.peak_cook_temp_C = 0.0
         self.viscosity_cP = VISC_BASE_cP
         self.packs_total = 0
+        self._packs_f = 0.0
         self.reject_count = 0
         self.samples = []
 
@@ -294,18 +325,34 @@ class VlaProcess:
         # distribute dosing budget across materials proportionally to their setpoints
         total_sp = sum(self.dose_setpoint_kg.values()) or 1.0
         budget = DOSE_RATE_KG_S * pdt
+        eff_setpoints: dict[str, float] = {}
         for mat, sp in self.dose_setpoint_kg.items():
             eff_sp = sp
             if self.active_fault and self.active_fault["id"] == "dose_off" and mat == "milk":
                 eff_sp = sp * (1.0 - self.active_fault["magnitude"])
+            eff_setpoints[mat] = eff_sp
             share = budget * (sp / total_sp)
             newval = min(eff_sp, self.dose_actual_kg[mat] + share)
             self.dose_actual_kg[mat] = newval
             if self.dose_actual_kg[mat] < eff_sp - 0.01:
                 remaining = True
 
-        # mix level in litres ~ total kg dosed (density ~1 for demo)
-        self.mix_level_L = sum(self.dose_actual_kg.values())
+        if not remaining:
+            # Valves close ON target: snap away the float residue left by the
+            # 0.01 kg exit tolerance. Without this the totals land a hair under
+            # setpoint (e.g. 5849.9999 kg -> 5849 instead of 5850 packs), and the
+            # smaller the per-tick dose the more visible that becomes.
+            self.dose_actual_kg = {m: eff_setpoints[m] for m in self.dose_actual_kg}
+
+        # Tank level in LITRES, not dosed kilograms. The recipe's base_L is the
+        # specified batch yield: the 5850 kg of milk/sugar/starch/cocoa dissolve
+        # into 5000 L of product. Reading the level straight off the mass made a
+        # 5000 L order fill 5850 packs, i.e. 117% "yield" out of thin air.
+        # Ramped with dosing progress so the tank still fills during DOSING, and
+        # a dose_off fault correctly yields proportionally less product.
+        total_sp_all = sum(self.dose_setpoint_kg.values()) or 1.0
+        dosed_frac = clamp(sum(self.dose_actual_kg.values()) / total_sp_all, 0.0, 1.0)
+        self.mix_level_L = self.batch_volume_L * dosed_frac
         # pull from receiving tank (milk source)
         self.receiving_level_L = max(0.0, self.receiving_level_L - budget * 0.0)
 
@@ -370,7 +417,9 @@ class VlaProcess:
         self.phase = "filling"
         packs_to_make = int(self.mix_level_L / self.pack_size_L)
         if self.packs_total < packs_to_make:
-            self.packs_total = min(packs_to_make, self.packs_total + int(FILL_RATE_PACKS_S * pdt) + 1)
+            # accumulate fractionally so the rate holds exactly at any TICK_INTERVAL
+            self._packs_f += FILL_RATE_PACKS_S * pdt
+            self.packs_total = min(packs_to_make, int(self._packs_f))
         if self.packs_total >= packs_to_make:
             self.packs_total = packs_to_make
             self.state = COMPLETE

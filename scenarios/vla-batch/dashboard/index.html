@@ -11,7 +11,8 @@
   body{margin:0;font:14px/1.45 system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--txt)}
   header{padding:14px 20px;background:linear-gradient(90deg,#0b1f3a,#12294a);border-bottom:1px solid var(--line);
          display:flex;align-items:center;gap:16px;flex-wrap:wrap}
-  header h1{font-size:18px;margin:0}header .sub{color:var(--mut);font-size:12px}
+  header h1{font-size:18px;margin:0}
+  header .sub,.sub{color:var(--mut);font-size:12px}
   .pill{padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
   .ok{background:#123c25;color:var(--green)}.bad{background:#3c1a17;color:var(--red)}
   nav{display:flex;gap:6px;margin-left:auto}
@@ -19,6 +20,12 @@
   nav button.active{background:var(--blue);border-color:var(--blue)}
   main{padding:18px 20px;max-width:1240px;margin:0 auto}
   .banner{background:#3c1a17;border:1px solid var(--red);color:#ffd9d3;padding:10px 14px;border-radius:10px;margin-bottom:14px;display:none}
+  /* refusal from the engine: what is blocked, why, and the way out */
+  .alert{background:#3c1a17;border:1px solid var(--red);color:#ffd9d3;padding:10px 14px;border-radius:10px;
+         margin:10px 0;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  .alert .why{flex:1;min-width:240px}
+  .alert .why b{display:block;margin-bottom:2px}
+  .alert .facts{color:#f5b7ae;font-size:12px}
   h2{font-size:15px;color:var(--mut);text-transform:uppercase;letter-spacing:.5px;margin:18px 0 10px}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px}
@@ -78,8 +85,10 @@
   <div id="conn" class="pill bad">offline</div>
   <nav>
     <button data-tab="sales" class="active">Sales overview</button>
+    <button data-tab="kpi">KPI</button>
     <button data-tab="batches">Batches</button>
     <button data-tab="orders">Orders</button>
+    <button data-tab="ingredients">Ingredients</button>
     <button data-tab="operator">Operator</button>
     <button data-tab="admin">SCADA / Admin</button>
     <button data-tab="equipment">Equipment</button>
@@ -117,6 +126,28 @@
           <span class="big" id="packs">—</span>
           <span class="lbl">rejects <b id="rejects">—</b></span>
         </div>
+        <div class="prog"><span id="packsBar" style="width:0%"></span></div>
+        <div class="kv" style="margin-top:4px"><span>target</span><b id="packsTarget">—</b></div>
+      </div>
+    </div>
+
+    <h2>Filling &amp; packaging</h2>
+    <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(230px,1fr))">
+      <div class="card">
+        <h3>Line speed</h3>
+        <div class="metric"><span class="big" id="fillRate">—</span><span class="lbl">packs / min</span></div>
+        <div class="sub">measured from the live counter</div>
+      </div>
+      <div class="card">
+        <h3>Pallets (1200 packs)</h3>
+        <div class="metric"><span class="big" id="palletsEst">—</span><span class="lbl">filled so far</span></div>
+        <div class="kv"><span>wrapped units</span><b id="huCount">—</b></div>
+      </div>
+      <div class="card">
+        <h3>Phase</h3>
+        <div class="metric"><span class="big" id="phaseName">—</span><span class="lbl" id="phaseElapsed">—</span></div>
+        <div class="prog"><span id="phaseBar" style="width:0%"></span></div>
+        <div class="sub">each phase runs about 30 s</div>
       </div>
     </div>
 
@@ -159,17 +190,37 @@
 
   <!-- ORDERS (PR-24) -->
   <section id="tab-orders" class="hidden">
-    <h2>New production order</h2>
-    <div class="row">
-      <label>Recipe<select id="ordRecipe"><option value="chocolate-vla-1L">chocolate-vla-1L</option></select></label>
-      <label>Target (L)<input id="ordQty" type="number" value="5000" min="500" step="500" style="width:120px"></label>
-      <label>Due date<input id="ordDue" type="date"></label>
-      <button class="act" onclick="createOrder()">Create order</button>
+    <div id="ordersList">
+      <h2>New production order</h2>
+      <div class="row">
+        <label>Recipe<select id="ordRecipe"><option value="chocolate-vla-1L">chocolate-vla-1L</option></select></label>
+        <label>Target (L)<input id="ordQty" type="number" value="5000" min="500" step="500" style="width:120px"></label>
+        <label>Due date<input id="ordDue" type="date"></label>
+        <button class="act" onclick="createOrder()">Create order</button>
+      </div>
+      <h2>Orders <span class="sub">— click a row for the full order</span></h2>
+      <table><thead><tr><th>Order</th><th>Recipe</th><th>Target (L)</th><th>Planned (L)</th>
+        <th>Produced (L)</th><th>Packs</th><th>Progress</th><th>Status</th><th></th></tr></thead>
+        <tbody id="ordersRows"></tbody></table>
+      <div id="ordersAlert" class="alert hidden"></div>
+      <p id="ordersMsg" class="sub"></p>
     </div>
-    <h2>Orders</h2>
-    <table><thead><tr><th>Order</th><th>Recipe</th><th>Target (L)</th><th>Batched (L)</th><th>Produced (packs)</th><th>Status</th><th></th></tr></thead>
-      <tbody id="ordersRows"></tbody></table>
-    <p id="ordersMsg" class="sub"></p>
+
+    <div id="orderDetail" class="hidden">
+      <span class="detail-back" onclick="closeOrderDetail()">← back to orders</span>
+      <h2 id="orderDetailTitle">Order</h2>
+      <div class="grid" id="orderTiles"></div>
+
+      <h3>Batches in this order</h3>
+      <table><thead><tr><th>Batch</th><th>State</th><th>Verdict</th><th>Planned (L)</th>
+        <th>Packs</th><th>Rejects</th><th>Started</th><th>Completed</th></tr></thead>
+        <tbody id="orderBatchRows"></tbody></table>
+
+      <h3>Ingredient consumption <span class="sub">— planned vs actual for this order</span></h3>
+      <table><thead><tr><th>Material</th><th>Planned</th><th>Actual</th><th>Delta</th>
+        <th>Delta %</th><th>Doses</th><th>Out of tolerance</th></tr></thead>
+        <tbody id="orderConsRows"></tbody></table>
+    </div>
   </section>
 
   <!-- OPERATOR — SCAN & WEIGH (PR-34) -->
@@ -266,6 +317,61 @@
     <p id="adminMsg" class="sub"></p>
   </section>
 
+  <!-- INGREDIENTS — stock, consumption, finished-good production -->
+  <section id="tab-ingredients" class="hidden">
+    <h2>Finished good</h2>
+    <div class="grid" id="fgTiles"></div>
+
+    <h2>Goods receipt <span class="sub">— book delivered raw material into stock</span></h2>
+    <div class="row">
+      <label>Material<select id="recvMat" style="min-width:160px"></select></label>
+      <label>Quantity<input id="recvQty" type="number" value="20000" min="1" step="100" style="width:120px"></label>
+      <label>Lot no<input id="recvLot" placeholder="optional" style="width:140px"></label>
+      <button class="act" onclick="receiveStock()">Book receipt</button>
+      <button class="gh" onclick="topUpAll()">Top up all to 2× reorder level</button>
+    </div>
+    <p id="recvMsg" class="sub"></p>
+
+    <h2>Ingredients <span class="sub">— stock against reorder level, and total consumed</span></h2>
+    <table><thead><tr>
+        <th>Material</th><th>Category</th><th>Stock</th><th>Reorder level</th>
+        <th>Stock level</th><th>Consumed</th><th>Batches</th><th></th>
+      </tr></thead>
+      <tbody id="invRows"></tbody></table>
+    <p class="sub">Consumption is booked per dose when a batch runs; the finished good is
+      booked per production entry. Both mutate stock live.</p>
+  </section>
+
+  <!-- KPI — OEE, output, quality, stock -->
+  <section id="tab-kpi" class="hidden">
+    <div class="row">
+      <label>Period<select id="kpiDays" onchange="refreshKpi()">
+        <option value="1">last 24 hours</option>
+        <option value="7" selected>last 7 days</option>
+        <option value="30">last 30 days</option>
+      </select></label>
+      <span class="sub" id="kpiMsg"></span>
+    </div>
+
+    <h2>Production &amp; yield</h2>
+    <div class="grid" id="kpiOutput"></div>
+
+    <h2>Quality &amp; batches</h2>
+    <div class="grid" id="kpiQuality"></div>
+
+    <h2>OEE per equipment</h2>
+    <table><thead><tr>
+        <th>Equipment</th><th>Availability</th><th>Performance</th><th>Quality</th><th>OEE</th>
+      </tr></thead>
+      <tbody id="kpiOeeRows"></tbody></table>
+
+    <h2>Stock &amp; consumption</h2>
+    <table><thead><tr>
+        <th>Material</th><th>Stock</th><th>Reorder level</th><th>Stock level</th><th>Consumed</th>
+      </tr></thead>
+      <tbody id="kpiStockRows"></tbody></table>
+  </section>
+
   <!-- EQUIPMENT — CBM health + OEE (fase 3) -->
   <section id="tab-equipment" class="hidden">
     <h2>Equipment health</h2>
@@ -288,12 +394,46 @@ const $ = s => document.querySelector(s);
 async function j(path, opts){
   const r = await fetch(API+path, opts);
   if(!r.ok){
-    let msg = r.status+" "+path;
-    try{ const body = await r.json(); if(body && body.detail && body.detail.message) msg = body.detail.message; }catch(_){}
-    throw new Error(msg);
+    // Fallback only when the engine sends no readable body (proxy error, engine
+    // down): still say what was refused, never just a bare status code.
+    let msg = `the engine refused ${opts&&opts.method||'GET'} ${path} (HTTP ${r.status}, no reason given)`;
+    let detail = null;
+    // FastAPI sends HTTPException(code,"text") as a plain string in `detail`;
+    // the scan + gate errors wrap it in an object with `.message` (+ reason,
+    // the numbers behind the refusal and the action that clears it).
+    try{ const body = await r.json();
+         if(body && body.detail){ detail = body.detail; msg = detail.message || detail; } }catch(_){}
+    const err = new Error(msg);
+    err.status = r.status;
+    err.detail = (detail && typeof detail === 'object') ? detail : null;
+    throw err;
   }
   return r.json();
 }
+// Renders a refusal into an alert box: message, the numbers behind it, and the
+// button that clears the block when the engine offered an action.
+function showAlert(elId, prefix, e, onDone){
+  const el = $('#'+elId); if(!el) return;
+  const d = e.detail;
+  const facts = d && d.reason === 'cip_required'
+    ? `Last CIP on ${d.equipment_id}: ${d.last_cip_at
+        ? d.last_cip_at.toString().replace('T',' ').slice(0,16) : 'never'}.`
+    : '';
+  const act = d && d.action && d.action.path
+    ? `<button class="act" data-path="${d.action.path}">${d.action.label||'Fix this'}</button>` : '';
+  el.innerHTML = `<div class="why"><b>${prefix}</b>${e.message}
+      ${facts?`<div class="facts">${facts}</div>`:''}</div>${act}`;
+  el.classList.remove('hidden');
+  const btn = el.querySelector('button[data-path]');
+  if(btn) btn.onclick = async () => {
+    const p = btn.dataset.path.startsWith(API) ? btn.dataset.path.slice(API.length) : btn.dataset.path;
+    btn.disabled = true;
+    try{ await post(p, {operator_id: $('#opId') ? $('#opId').value : null});
+         clearAlert(elId); if(onDone) await onDone(); }
+    catch(err){ showAlert(elId, 'Action failed: ', err, onDone); }
+  };
+}
+function clearAlert(elId){ const el=$('#'+elId); if(el){ el.innerHTML=''; el.classList.add('hidden'); } }
 async function post(path, body){
   return j(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
 }
@@ -301,11 +441,19 @@ function num(v,d=1){ const n=parseFloat(v); return isNaN(n)?null:n; }
 function fmt(v,u='',d=1){ const n=num(v); return n===null?'—':(d===0?Math.round(n):n.toFixed(d))+(u?' '+u:''); }
 
 // ── tabs ───────────────────────────────────────────────────────────────────
+const TABS = ['sales','kpi','batches','orders','ingredients','operator','admin','equipment'];
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
   b.classList.add('active');
-  ['sales','batches','orders','operator','admin','equipment'].forEach(t=>$('#tab-'+t).classList.toggle('hidden',t!==b.dataset.tab));
+  TABS.forEach(t=>$('#tab-'+t).classList.toggle('hidden',t!==b.dataset.tab));
+  // refresh immediately so a freshly-opened tab is never empty (its poll loop
+  // skips while hidden — see visible())
+  const onOpen = {ingredients:()=>refreshInventory(), kpi:()=>refreshKpi(),
+                  orders:()=>refreshOrders(), batches:()=>refreshBatches(),
+                  equipment:()=>refreshEquipment()};
+  (onOpen[b.dataset.tab] || (()=>{}))();
 });
+function visible(tab){ return !$('#tab-'+tab).classList.contains('hidden'); }
 
 // ── UNS tag helpers (contract §ISA-95 tags) ─────────────────────────────────
 // topic pattern: DairyWorks/Vla/{Area}/{Equipment}/Status/{tag}
@@ -317,12 +465,41 @@ function tagVal(tags, area, eq, tag){
 function batchStatus(tags, tag){ return tags[`DairyWorks/Vla/Batch/Status/${tag}`]; }
 
 const LIFECYCLE = ['IDLE','DOSING','COOKING','COOLING','FILLING','COMPLETE'];
+const ACTIVE_STATES = ['DOSING','COOKING','COOLING','FILLING'];
 const DOSES = [
-  {mat:'milk',   label:'Milk',   sp:'dose_milk_setpoint_kg',   ac:'dose_milk_actual_kg'},
-  {mat:'sugar',  label:'Sugar',  sp:'dose_sugar_setpoint_kg',  ac:'dose_sugar_actual_kg'},
-  {mat:'starch', label:'Starch', sp:'dose_starch_setpoint_kg', ac:'dose_starch_actual_kg'},
-  {mat:'cocoa',  label:'Cocoa',  sp:'dose_cocoa_setpoint_kg',  ac:'dose_cocoa_actual_kg'},
+  {mat:'milk',   label:'Milk',   ac:'dose_milk_actual_kg'},
+  {mat:'sugar',  label:'Sugar',  ac:'dose_sugar_actual_kg'},
+  {mat:'starch', label:'Starch', ac:'dose_starch_actual_kg'},
+  {mat:'cocoa',  label:'Cocoa',  ac:'dose_cocoa_actual_kg'},
 ];
+
+// Dose TARGETS come from the MES (recipe scaled to the order), not from the UNS.
+// The dose_*_setpoint_kg OPC-UA nodes do exist and are filled, but they are not
+// in MonsterMQ's subscription list, so they never reach /tags — which is why the
+// cards used to read "target —, progress 0%". Actuals still come from the UNS.
+// Cached per batch: targets don't change during a run.
+let _doseCtx = {batchId:null, targets:{}, plannedL:null, loading:false};
+
+async function loadDoseTargets(){
+  if(_doseCtx.loading) return;
+  _doseCtx.loading = true;
+  try{
+    const list = await j('/batches');
+    // Match on the MES batch id (B-…). Do NOT use batchStatus(tags,'batch_id'):
+    // that is the factory's own id (VLA-…) and will never match.
+    const active = (Array.isArray(list)?list:[])
+      .find(b => ACTIVE_STATES.includes(String(b.state||'').toUpperCase()));
+    if(!active){ _doseCtx.batchId=null; _doseCtx.targets={}; _doseCtx.plannedL=null; return; }
+    if(active.batch_id === _doseCtx.batchId) return;   // already cached
+    const b = await j('/batches/'+encodeURIComponent(active.batch_id));
+    const t = {};
+    (b.doses||[]).forEach(d => { t[d.material_id] = d; });
+    _doseCtx.batchId = active.batch_id;
+    _doseCtx.targets = t;
+    _doseCtx.plannedL = b.planned_L ?? active.planned_L ?? null;
+  }catch(e){ /* keep whatever we had; cards degrade to — */ }
+  finally{ _doseCtx.loading = false; }
+}
 
 function renderStepper(state){
   const idx = LIFECYCLE.indexOf(state);
@@ -382,26 +559,101 @@ async function refreshSales(){
   renderGauge(visc);
   $('#solve').style.display = (visc!==null && visc < 150 && state!=='IDLE') ? 'block' : 'none';
 
-  // packs
-  $('#packs').textContent   = fmt(tagVal(tags,'Filling','filler-01','packs_total'),'',0);
+  // packs + filling/packaging detail
+  const packs = num(tagVal(tags,'Filling','filler-01','packs_total'));
+  $('#packs').textContent   = fmt(packs,'',0);
   $('#rejects').textContent = fmt(tagVal(tags,'Filling','filler-01','reject_count'),'',0);
+  renderFilling(tags, packs, state);
 
-  // dosing progress
-  $('#doseCards').innerHTML = DOSES.map(d=>{
-    const target=num(tagVal(tags,'Mixing','process-tank-01',d.sp));
-    const actual=num(tagVal(tags,'Mixing','process-tank-01',d.ac));
-    const pct = (target&&target>0)?Math.min(100,Math.round(100*(actual||0)/target)):0;
+  // dosing progress — actuals from the UNS, targets from the MES
+  if(ACTIVE_STATES.includes(state)) loadDoseTargets();
+  else if(state==='IDLE'){ _doseCtx.batchId=null; _doseCtx.targets={}; _doseCtx.plannedL=null; }
+  renderDoseCards(tags);
+}
+
+// filling + packaging. There is no packs_target / rate tag on the UNS, so both
+// are derived here: the target from the batch's planned litres, the rate from
+// two consecutive readings of the live counter.
+let _fill = {packs:null, t:0, rate:null, state:null, stateSince:0, hu:null, huFor:null};
+const PACKS_PER_PALLET = 1200;   // matches the operator tab's default HU size
+const PHASE_SEC = 30;            // deployed factory tempo, see docker-compose.vla.yml
+
+function renderFilling(tags, packs, state){
+  const now = Date.now();
+
+  // target packs: planned litres / pack size, both from the cached MES batch
+  const planned = num(_doseCtx.plannedL);
+  const packSize = num(tagVal(tags,'Filling','filler-01','pack_size_L')) || 1;
+  const target = (planned && packSize) ? Math.round(planned/packSize) : null;
+  $('#packsTarget').textContent = fmt(target,'packs',0);
+  const ppct = (target && packs!==null) ? Math.min(100, Math.round(100*packs/target)) : 0;
+  $('#packsBar').style.width = ppct+'%';
+
+  // line speed from the counter delta
+  if(packs!==null && _fill.packs!==null && now>_fill.t){
+    const d = packs - _fill.packs, dt = (now-_fill.t)/1000;
+    if(d>0 && dt>0) _fill.rate = (d/dt)*60;
+    else if(state!=='FILLING') _fill.rate = 0;
+  }
+  if(packs!==null){ _fill.packs = packs; _fill.t = now; }
+  $('#fillRate').textContent = _fill.rate===null ? '—' : Math.round(_fill.rate);
+
+  // packaging
+  $('#palletsEst').textContent = packs===null ? '—' : Math.floor(packs/PACKS_PER_PALLET);
+  if(_doseCtx.batchId && _doseCtx.batchId!==_fill.huFor){
+    _fill.huFor = _doseCtx.batchId;
+    j('/hu?batch_id='+encodeURIComponent(_doseCtx.batchId))
+      .then(h=>{ _fill.hu = Array.isArray(h)?h.length:0; })
+      .catch(()=>{ _fill.hu = null; });
+  }
+  if(!_doseCtx.batchId){ _fill.hu = null; _fill.huFor = null; }
+  $('#huCount').textContent = _fill.hu===null ? '—' : _fill.hu;
+
+  // phase timer
+  if(state !== _fill.state){ _fill.state = state; _fill.stateSince = now; }
+  const el = (now - _fill.stateSince)/1000;
+  const active = ACTIVE_STATES.includes(state);
+  $('#phaseName').textContent = state==='IDLE' ? 'idle' : state.toLowerCase();
+  $('#phaseElapsed').textContent = active ? Math.round(el)+' s' : '—';
+  $('#phaseBar').style.width = (active ? Math.min(100, Math.round(100*el/PHASE_SEC)) : 0)+'%';
+}
+
+function renderDoseCards(tags){
+  let totAct=0, totTgt=0, haveTgt=false;
+  const cards = DOSES.map(d=>{
+    const dose   = _doseCtx.targets[d.mat] || {};
+    const target = num(dose.qty_target);
+    const actual = num(tagVal(tags,'Mixing','process-tank-01',d.ac));
+    const pct = (target && target>0) ? Math.min(100, Math.round(100*(actual||0)/target)) : 0;
+    const rest = (target!==null && actual!==null) ? Math.max(0, target-actual) : null;
+    if(actual!==null) totAct += actual;
+    if(target!==null){ totTgt += target; haveTgt = true; }
+    const tol = (num(dose.tol_min)!==null && num(dose.tol_max)!==null)
+      ? `<div class="kv"><span>tolerance</span><b>${fmt(dose.tol_min,'',0)}–${fmt(dose.tol_max,'kg',0)}</b></div>` : '';
     return `<div class="card"><h3>${d.label}</h3>
       <div class="kv"><span>actual</span><b>${fmt(actual,'kg',0)}</b></div>
       <div class="kv"><span>target</span><b>${fmt(target,'kg',0)}</b></div>
+      <div class="kv"><span>remaining</span><b>${fmt(rest,'kg',0)}</b></div>
+      ${tol}
       <div class="dose-bar"><span style="width:${pct}%"></span></div>
       <div class="kv" style="margin-top:4px"><span>progress</span><b>${pct}%</b></div></div>`;
-  }).join('');
+  });
+
+  const tpct = haveTgt && totTgt>0 ? Math.min(100, Math.round(100*totAct/totTgt)) : 0;
+  cards.push(`<div class="card"><h3>Total charge</h3>
+    <div class="metric"><span class="big">${tpct}%</span>
+      <span class="lbl">${fmt(totAct,'',0)} / ${haveTgt?fmt(totTgt,'kg',0):'—'}</span></div>
+    <div class="dose-bar"><span style="width:${tpct}%"></span></div>
+    <div class="sub" style="margin-top:6px">All four materials dose in parallel and
+      finish together — that is by design, not a stalled line.</div></div>`);
+
+  $('#doseCards').innerHTML = cards.join('');
 }
 
 // ── BATCHES list ────────────────────────────────────────────────────────────
 async function refreshBatches(){
   if($('#batchDetail').classList.contains('hidden')===false) return; // detail open
+  if(!visible('batches')) return;
   let list; try{ list = await j('/batches'); }catch(e){ return; }
   if(!Array.isArray(list)) list = list.batches||list.data||[];
   $('#batches').innerHTML = list.map(b=>{
@@ -496,34 +748,232 @@ async function createOrder(){
     await post('/orders', {recipe_id: $('#ordRecipe').value,
       target_qty_L: parseFloat($('#ordQty').value),
       due_date: $('#ordDue').value || null});
+    clearAlert('ordersAlert');
     await refreshOrders();
     $('#ordersMsg').textContent = 'order created';
-  }catch(e){ $('#ordersMsg').textContent = 'create failed: '+e.message; }
+  }catch(e){ $('#ordersMsg').textContent = '';
+             showAlert('ordersAlert', 'Order not created: ', e); }
 }
+function orderStatusBadge(status){
+  const bg = status==='DONE' ? '#0b4f2a' : status==='RUNNING' ? '#1a7f37' : '#57606a';
+  return `<span class="badge" style="background:${bg};color:#fff">${status}</span>`;
+}
+let currentOrderId = null;
+
 async function refreshOrders(){
+  if(currentOrderId) return;                       // keep the open detail panel
+  if(!visible('orders')) return;
   try{
     const rows = await j('/orders');
-    $('#ordersRows').innerHTML = rows.map(o => `<tr>
+    $('#ordersRows').innerHTML = rows.map(o => {
+      const p = o.progress || {};
+      const pct = Math.min(100, Math.round(p.progress_pct || 0));
+      return `<tr class="clickable" onclick="openOrderDetail('${o.order_id}')">
       <td>${o.order_id}</td><td>${o.recipe_id}</td>
-      <td>${o.target_qty_L}</td><td>${o.progress.batched_L}</td>
-      <td>${o.progress.produced_packs}</td>
-      <td><span class="badge" style="background:${
-        o.status==='DONE' ? '#0b4f2a' : o.status==='RUNNING' ? '#1a7f37' : '#57606a'
-      };color:#fff">${o.status}</span></td>
-      <td>${o.status!=='DONE'
+      <td>${fmt(o.target_qty_L,'',0)}</td><td>${fmt(p.batched_L,'',0)}</td>
+      <td>${fmt(p.produced_L,'',0)}</td><td>${fmt(p.produced_packs,'',0)}</td>
+      <td><div class="prog"><span style="width:${pct}%"></span></div><span class="sub">${pct}%</span></td>
+      <td>${orderStatusBadge(o.status)}</td>
+      <td onclick="event.stopPropagation()">${o.status!=='DONE'
         ? `<button class="gh" onclick="orderBatch('${o.order_id}')">+ batch</button>
            <button class="gh" onclick="closeOrder('${o.order_id}')">close</button>` : ''}</td>
-    </tr>`).join('');
+    </tr>`;}).join('') || '<tr><td colspan="9" class="sub">No orders yet.</td></tr>';
   }catch(e){ /* engine offline */ }
+}
+
+async function openOrderDetail(oid){
+  let o; try{ o = await j('/orders/'+encodeURIComponent(oid)); }
+  catch(e){ $('#ordersMsg').textContent='load failed: '+e.message; return; }
+  currentOrderId = oid;
+  $('#ordersList').classList.add('hidden');
+  $('#orderDetail').classList.remove('hidden');
+
+  const p = o.progress || {};
+  $('#orderDetailTitle').textContent = `Order ${o.order_id} — ${o.recipe_id}`;
+  const pct = Math.min(100, Math.round(p.progress_pct || 0));
+  $('#orderTiles').innerHTML = `
+    <div class="card"><h3>Target</h3><div class="metric"><span class="big">${fmt(o.target_qty_L,'',0)}</span><span class="lbl">litres ordered</span></div></div>
+    <div class="card"><h3>Produced</h3><div class="metric"><span class="big">${fmt(p.produced_L,'',0)}</span><span class="lbl">litres · ${fmt(p.produced_packs,'packs',0)}</span></div>
+      <div class="prog"><span style="width:${pct}%"></span></div>
+      <div class="kv" style="margin-top:4px"><span>remaining</span><b>${fmt(p.remaining_L,'L',0)}</b></div></div>
+    <div class="card"><h3>Planned</h3><div class="metric"><span class="big">${fmt(p.batched_L,'',0)}</span><span class="lbl">litres in ${p.batches_count||0} batches</span></div>
+      <div class="sub">planned volume, not yet the yield</div></div>
+    <div class="card"><h3>Status</h3><div class="metric"><span class="big">${orderStatusBadge(o.status)}</span><span class="lbl">rejects ${fmt(p.reject_total,'',0)}</span></div>
+      <div class="kv"><span>due</span><b>${o.due_date || '—'}</b></div>
+      <div class="kv"><span>created</span><b>${(o.created_at||'').toString().replace('T',' ').slice(0,16)}</b></div></div>`;
+
+  $('#orderBatchRows').innerHTML = (o.batches||[]).map(b=>`
+    <tr class="clickable" onclick="openDetail('${b.batch_id}')">
+      <td>${b.batch_id}</td>
+      <td><span class="status s-${b.state||''}">${b.state||''}</span></td>
+      <td>${b.verdict?`<span class="badge v-${b.verdict}">${b.verdict}</span>`:'—'}</td>
+      <td>${fmt(b.planned_L,'',0)}</td><td>${fmt(b.packs_total,'',0)}</td><td>${fmt(b.reject_count,'',0)}</td>
+      <td>${(b.started_at||'').toString().replace('T',' ').slice(0,19) || '—'}</td>
+      <td>${(b.completed_at||'').toString().replace('T',' ').slice(0,19) || '—'}</td>
+    </tr>`).join('') || '<tr><td colspan="8" class="sub">No batches on this order yet.</td></tr>';
+
+  $('#orderConsRows').innerHTML = (o.consumption||[]).map(c=>{
+    const off = c.out_of_tolerance>0;
+    return `<tr>
+      <td>${c.name||c.material_id}</td>
+      <td>${fmt(c.qty_target,c.uom,1)}</td><td>${fmt(c.qty_actual,c.uom,1)}</td>
+      <td style="color:${Math.abs(c.delta)>0.001?'var(--yellow)':'var(--mut)'}">${c.delta>0?'+':''}${fmt(c.delta,'',2)}</td>
+      <td>${fmt(c.delta_pct,'%',2)}</td><td>${c.doses_count}</td>
+      <td>${off?`<span class="badge v-HOLD">${c.out_of_tolerance}</span>`:'—'}</td>
+    </tr>`;}).join('') || '<tr><td colspan="7" class="sub">Nothing dosed on this order yet.</td></tr>';
+}
+function closeOrderDetail(){
+  $('#orderDetail').classList.add('hidden');
+  $('#ordersList').classList.remove('hidden');
+  currentOrderId = null;
+  refreshOrders();
 }
 async function orderBatch(oid){
   try{ await post(`/orders/${oid}/batches`, {operator_id: $('#opId').value});
+       clearAlert('ordersAlert');
        await refreshOrders(); $('#ordersMsg').textContent='batch created on '+oid; }
-  catch(e){ $('#ordersMsg').textContent='batch failed: '+e.message; }
+  catch(e){ $('#ordersMsg').textContent='';
+            // a gate (Dirty cook unit, closed order) blocked it: show why + the
+            // action, and retry the batch once the operator cleared the block
+            showAlert('ordersAlert', `No batch started on ${oid}: `, e,
+                      () => orderBatch(oid)); }
 }
 async function closeOrder(oid){
-  try{ await post(`/orders/${oid}/close`, {}); await refreshOrders(); }
-  catch(e){ $('#ordersMsg').textContent='close refused: '+e.message; }
+  try{ await post(`/orders/${oid}/close`, {}); clearAlert('ordersAlert'); await refreshOrders(); }
+  catch(e){ $('#ordersMsg').textContent='';
+            showAlert('ordersAlert', `Order ${oid} not closed: `, e); }
+}
+
+// ── INGREDIENTS ─────────────────────────────────────────────────────────────
+function stockBar(m){
+  if(m.stock_pct===null || m.stock_pct===undefined) return '<span class="sub">—</span>';
+  const pct = Math.min(100, Math.round(m.stock_pct));   // 100% == at reorder level
+  const col = m.below_reorder ? 'var(--red)' : 'var(--green)';
+  return `<div class="prog"><span style="width:${pct}%;background:${col}"></span></div>
+          <span class="sub">${Math.round(m.stock_pct)}% of reorder level</span>`;
+}
+async function refreshInventory(){
+  if(!visible('ingredients')) return;
+  let inv; try{ inv = await j('/inventory'); }catch(e){ return; }
+  const mats = inv.materials || [];
+  const fg = mats.filter(m=>m.is_finished_good);
+  const ing = mats.filter(m=>!m.is_finished_good);
+
+  $('#fgTiles').innerHTML = fg.map(m=>`
+    <div class="card"><h3>${m.name}</h3>
+      <div class="metric"><span class="big">${fmt(m.produced_total,'',0)}</span><span class="lbl">packs produced</span></div>
+      <div class="kv"><span>volume</span><b>${fmt(m.produced_L,'L',0)}</b></div>
+      <div class="kv"><span>in stock</span><b>${fmt(m.stock_qty,m.uom,0)}</b></div></div>`).join('')
+    || '<div class="card"><span class="sub">No finished good booked yet.</span></div>';
+
+  $('#invRows').innerHTML = ing.map(m=>`<tr>
+      <td>${m.name}${m.below_reorder?' <span class="badge v-REJECTED">below reorder</span>':''}</td>
+      <td>${m.category||''}</td>
+      <td style="${m.stock_qty<0?'color:var(--red);font-weight:700':''}">${fmt(m.stock_qty,m.uom,0)}</td>
+      <td>${fmt(m.reorder_level,m.uom,0)}</td>
+      <td>${stockBar(m)}</td>
+      <td>${fmt(m.consumed_total,m.uom,1)}</td><td>${m.batches_count}</td>
+      <td><button class="gh" onclick="receiveStock('${m.material_id}')">+ stock</button></td>
+    </tr>`).join('') || '<tr><td colspan="8" class="sub">No materials.</td></tr>';
+
+  // keep the receipt dropdown in sync with the material master
+  const sel = $('#recvMat');
+  const keep = sel.value;
+  sel.innerHTML = ing.map(m=>`<option value="${m.material_id}">${m.name} (${m.uom})</option>`).join('');
+  if(keep) sel.value = keep;
+  _invCache = ing;
+}
+
+let _invCache = [];
+
+async function receiveStock(materialId){
+  const mid = materialId || $('#recvMat').value;
+  const qty = parseFloat($('#recvQty').value);
+  if(!mid || !(qty>0)){ $('#recvMsg').textContent='pick a material and a quantity > 0'; return; }
+  try{
+    const r = await post(`/materials/${encodeURIComponent(mid)}/receipt`,
+                         {qty, lot_no: $('#recvLot').value || null, operator_id: $('#opId').value});
+    $('#recvMsg').textContent = `booked ${qty} of ${mid} — stock is now ${r.stock_qty}`;
+    await refreshInventory();
+  }catch(e){ $('#recvMsg').textContent = 'receipt failed: '+e.message; }
+}
+
+async function topUpAll(){
+  // brings every ingredient back to twice its reorder level in one go — the
+  // quickest way to make a long-running demo presentable again
+  const todo = _invCache.filter(m=>m.reorder_level>0 && m.stock_qty < 2*m.reorder_level);
+  if(!todo.length){ $('#recvMsg').textContent='all ingredients are already stocked'; return; }
+  $('#recvMsg').textContent = `booking ${todo.length} receipts…`;
+  try{
+    for(const m of todo){
+      const qty = Math.ceil((2*m.reorder_level - m.stock_qty)/100)*100;
+      await post(`/materials/${encodeURIComponent(m.material_id)}/receipt`,
+                 {qty, lot_no:'TOPUP', operator_id: $('#opId').value});
+    }
+    $('#recvMsg').textContent = `topped up ${todo.length} materials`;
+    await refreshInventory();
+  }catch(e){ $('#recvMsg').textContent = 'top-up failed: '+e.message; }
+}
+
+// ── KPI ─────────────────────────────────────────────────────────────────────
+function kpiTile(title, big, lbl, extra=''){
+  return `<div class="card"><h3>${title}</h3>
+    <div class="metric"><span class="big">${big}</span><span class="lbl">${lbl}</span></div>${extra}</div>`;
+}
+async function refreshKpi(){
+  if(!visible('kpi')) return;
+  const days = $('#kpiDays').value;
+  let rep=null, oee=null, inv=null;
+  try{
+    [rep, oee, inv] = await Promise.all([
+      j('/report/period?days='+days).catch(()=>null),
+      j('/oee').catch(()=>null),
+      j('/inventory').catch(()=>null),
+    ]);
+  }catch(e){ /* keep whatever rendered */ }
+  $('#kpiMsg').textContent = rep ? '' : 'period report unavailable';
+
+  // production & yield
+  const packs = inv ? inv.produced_packs : null;
+  const litres = inv ? inv.produced_L : null;
+  const yieldPct = rep && rep.yield_pct!=null ? rep.yield_pct : null;
+  const perDay = (packs!==null && days) ? Math.round(packs/parseFloat(days)) : null;
+  $('#kpiOutput').innerHTML =
+      kpiTile('Packs produced', fmt(packs,'',0), 'total booked')
+    + kpiTile('Volume', fmt(litres,'',0), 'litres')
+    + kpiTile('Average per day', fmt(perDay,'',0), 'packs / day')
+    + kpiTile('Yield', yieldPct===null?'—':fmt(yieldPct,'%',1), 'packs vs planned litres');
+
+  // quality & batches
+  const byV = (rep && rep.batches_by_verdict) || {};
+  const total = rep && rep.batches_total!=null ? rep.batches_total : null;
+  const appr = byV.APPROVED || 0;
+  const apprPct = total ? Math.round(100*appr/total) : null;
+  const verdictRows = Object.keys(byV).length
+    ? `<div style="margin-top:6px">${Object.entries(byV).map(([k,v])=>
+        `<div class="kv"><span><span class="badge v-${k}">${k}</span></span><b>${v}</b></div>`).join('')}</div>`
+    : '<div class="sub" style="margin-top:6px">no batches in this period</div>';
+  $('#kpiQuality').innerHTML =
+      kpiTile('Batches', fmt(total,'',0), 'in period')
+    + kpiTile('Approved', apprPct===null?'—':apprPct+'%', `${appr} of ${total||0}`)
+    + kpiTile('Verdicts', '', '', verdictRows)
+    + kpiTile('Hold / reject ratio',
+        rep && rep.hold_reject_ratio!=null ? fmt(100*rep.hold_reject_ratio,'%',1) : '—',
+        'of batches not approved');
+
+  // OEE
+  $('#kpiOeeRows').innerHTML = (oee||[]).map(e=>`<tr>
+      <td>${e.equipment_id}</td><td>${pct(e.availability)}</td><td>${pct(e.performance)}</td>
+      <td>${pct(e.quality)}</td><td><b>${pct(e.oee)}</b></td></tr>`).join('')
+    || '<tr><td colspan="5" class="sub">No OEE data.</td></tr>';
+
+  // stock
+  const ing = inv ? (inv.materials||[]).filter(m=>!m.is_finished_good) : [];
+  $('#kpiStockRows').innerHTML = ing.map(m=>`<tr>
+      <td>${m.name}${m.below_reorder?' <span class="badge v-REJECTED">low</span>':''}</td>
+      <td>${fmt(m.stock_qty,m.uom,0)}</td><td>${fmt(m.reorder_level,m.uom,0)}</td>
+      <td>${stockBar(m)}</td><td>${fmt(m.consumed_total,m.uom,1)}</td></tr>`).join('')
+    || '<tr><td colspan="5" class="sub">No materials.</td></tr>';
 }
 
 // ---- Operator scan tab (PR-34) ----
@@ -651,6 +1101,7 @@ function eqStateColor(state){
 }
 function pct(v){ const n=num(v); return n===null?'—':(Math.round(n*1000)/10)+'%'; }
 async function refreshEquipment(){
+  if(!visible('equipment')) return;
   let health, oee;
   try{ [health, oee] = await Promise.all([j('/equipment/health'), j('/oee')]); }
   catch(e){ return; }
@@ -688,12 +1139,17 @@ async function doCip(eqId){
 }
 
 // ── boot + poll (~1-2s) ─────────────────────────────────────────────────────
+// Each loop skips while its tab is hidden (see visible()); switching tabs
+// triggers an immediate refresh. Sales keeps polling regardless — it also drives
+// the connection pill in the header.
 renderStepper('IDLE');
 refreshSales(); refreshBatches(); refreshOrders(); refreshEquipment();
 setInterval(refreshSales, 1500);
 setInterval(refreshBatches, 2500);
 setInterval(refreshOrders, 2500);
 setInterval(refreshEquipment, 2500);
+setInterval(refreshInventory, 5000);
+setInterval(refreshKpi, 5000);
 </script>
 </body>
 </html>

@@ -24,6 +24,36 @@ EQUIPMENT_IDS = ["receiving-tank-01", "process-tank-01", "cook-unit-01",
                  "cooler-01", "filler-01"]
 
 
+class CipRequired(ValueError):
+    """Raised by the CIP gate when equipment is Dirty and refuses a new batch.
+
+    Carries the numbers the operator needs (counter vs limit) plus the action
+    that clears the block, so the API can hand the UI a message it can render
+    and a button it can offer. Same shape as ScanRejected: a ValueError whose
+    `detail` becomes the HTTPException body."""
+
+    def __init__(self, equipment_id: str, batches_since_cip: int, limit: int,
+                 last_cip_at: Optional[str] = None):
+        message = (f"{equipment_id} is Dirty: {batches_since_cip} of max "
+                   f"{limit} batches since the last CIP. Clean "
+                   f"{equipment_id} (CIP) before starting a new batch.")
+        super().__init__(message)
+        self.equipment_id = equipment_id
+        self.detail = {
+            "message": message,
+            "reason": "cip_required",
+            "equipment_id": equipment_id,
+            "batches_since_cip": batches_since_cip,
+            "limit": limit,
+            "last_cip_at": last_cip_at,
+            "action": {
+                "label": f"Run CIP on {equipment_id}",
+                "method": "POST",
+                "path": f"/api/v1/equipment/{equipment_id}/cip",
+            },
+        }
+
+
 def _iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -191,8 +221,27 @@ class EquipmentMonitor:
 
         return alert
 
+    def cip_status(self, equipment_id: str) -> dict:
+        """Cleaning state of one equipment: dirty flag, the fouling counter and
+        the limit it is measured against (what an operator needs to read)."""
+        meta = self.ensure_meta(equipment_id)
+        return {
+            "equipment_id": equipment_id,
+            "dirty": bool(meta.get("dirty")),
+            "batches_since_cip": meta.get("batches_since_cip", 0),
+            "limit": DIRTY_AFTER_BATCHES,
+            "last_cip_at": meta.get("last_cip_at"),
+        }
+
     def is_dirty(self, equipment_id: str) -> bool:
-        return bool(self.ensure_meta(equipment_id).get("dirty"))
+        return self.cip_status(equipment_id)["dirty"]
+
+    def require_clean(self, equipment_id: str) -> None:
+        """CIP gate: raise CipRequired when `equipment_id` still needs cleaning."""
+        st = self.cip_status(equipment_id)
+        if st["dirty"]:
+            raise CipRequired(equipment_id, st["batches_since_cip"],
+                              st["limit"], st["last_cip_at"])
 
     def perform_cip(self, equipment_id: str,
                     operator_id: Optional[str] = None) -> dict:
