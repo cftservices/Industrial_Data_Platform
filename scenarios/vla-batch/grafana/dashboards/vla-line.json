@@ -1,7 +1,7 @@
 {
   "uid": "vla-line",
   "id": null,
-  "version": 2,
+  "version": 3,
   "title": "VLA Line — Live (DairyWorks)",
   "description": "Live line view of the DairyWorks vla batch demo, read from the TDengine historian (idp.telemetry, fed by the MQTT bridge from DairyWorks/Vla/#). Setpoints (cook 88 C, cool 22 C, hold 300 s) and dose targets are drawn from the recipe in factory/physics.py, not from the UNS: those tags barely change so they carry no usable history.",
   "tags": [
@@ -60,7 +60,7 @@
           "calcs": [
             "lastNotNull"
           ],
-          "fields": "",
+          "fields": "/.*/",
           "values": false
         }
       },
@@ -142,7 +142,7 @@
           "calcs": [
             "lastNotNull"
           ],
-          "fields": "",
+          "fields": "/.*/",
           "values": false
         }
       },
@@ -241,7 +241,7 @@
     {
       "id": 4,
       "type": "gauge",
-      "title": "Cook hold",
+      "title": "Cook hold (s)",
       "description": "Hold runs to 300 process-seconds; at TIME_SCALE 15 that is about 20 real seconds.",
       "gridPos": {
         "x": 12,
@@ -278,7 +278,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "s",
+          "unit": "none",
           "decimals": 0,
           "min": 0,
           "max": 300,
@@ -404,7 +404,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "none",
           "decimals": 0,
           "min": 0,
           "max": 5000,
@@ -1415,7 +1415,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "none",
           "decimals": 2,
           "thresholds": {
             "mode": "absolute",
@@ -1472,7 +1472,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "none",
           "decimals": 0,
           "thresholds": {
             "mode": "absolute",
