@@ -10,13 +10,29 @@ datasources:
   # TDengine (vla-tdengine, OSS) — everything the bridge wrote from MQTT
   # DairyWorks/Vla/# into idp.telemetry. taosAdapter REST on :6041.
   #
-  # ⚠ WHY basicAuth AND NOT jsonData.user + secureJsonData.password:
-  # plugin 3.x uses Grafana's standard HTTP settings. Its health check runs
-  # `select server_version()` against ${url}/rest/sql using Grafana's own
-  # basic-auth header. With jsonData.user/secureJsonData.password no
-  # Authorization header is sent at all, and taosAdapter answers
-  # 401 Unauthorized — which is exactly what /api/datasources/<id>/health
-  # reported. The credentials were never wrong, the keys were.
+  # ⚠ THIS DATASOURCE NEEDS ITS CREDENTIALS IN THREE PLACES. That is not
+  # redundancy, the plugin has two independent code paths:
+  #
+  #  1. BACKEND — /api/ds/query, used by alerting and by the HTTP API.
+  #     Reads jsonData.url and Grafana's own basicAuth/basicAuthUser +
+  #     secureJsonData.basicAuthPassword. This is also what the health check
+  #     uses, so a green health button proves only half the wiring.
+  #
+  #  2. FRONTEND — /api/datasources/proxy/uid/<uid>/sql, used by every panel
+  #     in the browser. Grafana resolves that against the plugin's own routes
+  #     in plugin.json, which are templated as:
+  #         url:    {{ .SecureJsonData.url }}/rest/sql
+  #         header: Basic {{ .SecureJsonData.basicAuth }}
+  #     So the frontend reads the URL and the credential out of secureJsonData,
+  #     and secureJsonData.basicAuth must be the BASE64 of "user:password",
+  #     not the plain password.
+  #
+  # Leave out the secureJsonData pair and every panel shows "No data" while the
+  # health check stays green and /api/ds/query keeps working. The proxy fails
+  # with `unsupported protocol scheme ""` (empty URL) and returns 502.
+  #
+  # Earlier this file used jsonData.user + secureJsonData.password, which is
+  # neither path: no Authorization header at all, so taosAdapter answered 401.
   - name: TDengine
     type: tdengine-datasource
     uid: vla-tdengine            # LOCK — dashboards reference this uid
@@ -24,14 +40,17 @@ datasources:
     access: proxy
     url: http://vla-tdengine:6041
     isDefault: true
+    # --- path 1: backend ---
     basicAuth: true
     basicAuthUser: root
-    secureJsonData:
-      # env interpolation; real value comes from .env TD_PASS (not in git)
-      basicAuthPassword: ${TD_PASS}
     jsonData:
-      # duplicate of `url` above: older plugin builds read the query URL here.
       url: http://vla-tdengine:6041
+    secureJsonData:
+      # env interpolation; real values come from .env (not in git)
+      basicAuthPassword: ${TD_PASS}
+      # --- path 2: frontend proxy routes ---
+      url: http://vla-tdengine:6041
+      basicAuth: ${TD_BASIC_AUTH}   # base64("root:<TD_PASS>")
     editable: true
 
   # ---------------------------------------------------------------------- MES

@@ -315,6 +315,12 @@ services:
       GF_INSTALL_PLUGINS: marcusolsson-json-datasource,tdengine-datasource
       # doorgegeven aan de TDengine-datasource provisioning (${TD_PASS}).
       TD_PASS: ${TD_PASS:-taosdata}
+      # base64("root:<TD_PASS>") — de plugin-proxyroutes (het pad dat de BROWSER
+      # gebruikt) bouwen hun Authorization-header uit secureJsonData.basicAuth,
+      # niet uit Grafana's eigen basicAuth. Zonder dit tonen alle panels
+      # "No data" terwijl de health-check groen blijft. Zet hem in .env:
+      #   TD_BASIC_AUTH=$(printf 'root:%s' "$TD_PASS" | base64 -w0)
+      TD_BASIC_AUTH: ${TD_BASIC_AUTH:-cm9vdDp0YW9zZGF0YQ==}
     # ── auth ──────────────────────────────────────────────────────────────
     # De slim-base zet vier Traefik-labels voor grafana.${DOMAIN} ZONDER
     # middleware, terwijl vla-dashboard wel achter milkdemo-auth zit. Grafana's
