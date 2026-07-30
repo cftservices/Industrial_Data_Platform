@@ -110,7 +110,13 @@ SETPOINT_READBACK = {
     ("Cook", "cook-unit-01", "setpoint_C"): lambda p: p.cook_setpoint_C,
     ("Cook", "cook-unit-01", "hold_sec"): lambda p: p.hold_sec,
     ("Cooling", "cooler-01", "target_C"): lambda p: p.cool_target_C,
-    ("Mixing", "process-tank-01", "agitator_rpm"): lambda p: p.agitator_setpoint_rpm,
+    # NOTE: agitator_rpm deliberately has NO readback entry.
+    # It already appears in AREA_TAGS as the live ACTUAL rpm, so echoing the
+    # setpoint here wrote a second, different value onto the same node every
+    # write cycle (actual 0, then setpoint 60, twice per 0.5 s). That is a
+    # permanent data-change stream: it produced 5.34 M of the historian's
+    # 5.35 M rows for this one tag, roughly 285k useless rows a day.
+    # The node is the actual; _write_status records the echo for it instead.
     ("Receiving", "receiving-tank-01", "fat_setpoint_pct"): lambda p: p.fat_setpoint_pct,
 }
 
@@ -266,12 +272,23 @@ class VlaServer:
         snap = self.p.read()
         for (area, eq), tags in snap.items():
             for tag, value in tags.items():
-                node = self.read_nodes.get((area, eq, tag))
+                key = (area, eq, tag)
+                node = self.read_nodes.get(key)
                 if node is None:
                     continue
                 vtype = _vtype_for(area, eq, tag)
                 try:
-                    await node.write_value(ua.Variant(_coerce(vtype, value), vtype))
+                    coerced = _coerce(vtype, value)
+                    await node.write_value(ua.Variant(coerced, vtype))
+                    # A node that is BOTH a live status value and a writable
+                    # setpoint target (agitator_rpm) has no SETPOINT_READBACK
+                    # entry, so record its echo here. Without this,
+                    # _apply_writable_setpoints() sees echoed is None forever and
+                    # would ignore every client write on that node.
+                    # Safe because apply runs BEFORE write in the main loop: it
+                    # compares against what we wrote last cycle.
+                    if key in SETPOINT_TARGETS and key not in SETPOINT_READBACK:
+                        self._last_setpoint_echo[key] = float(coerced)
                 except Exception:
                     pass
         # reflect live setpoints back so a browse shows the true value; remember the

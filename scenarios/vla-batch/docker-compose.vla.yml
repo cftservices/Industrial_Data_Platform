@@ -315,6 +315,27 @@ services:
       GF_INSTALL_PLUGINS: marcusolsson-json-datasource,tdengine-datasource
       # doorgegeven aan de TDengine-datasource provisioning (${TD_PASS}).
       TD_PASS: ${TD_PASS:-taosdata}
+    # ── auth ──────────────────────────────────────────────────────────────
+    # De slim-base zet vier Traefik-labels voor grafana.${DOMAIN} ZONDER
+    # middleware, terwijl vla-dashboard wel achter milkdemo-auth zit. Grafana's
+    # eigen login was dan de enige barrière voor de volledige historian. Deze
+    # override zet dezelfde basicauth ervoor, zodat beide web-facing services
+    # dezelfde voordeur hebben.
+    #
+    # ⚠ Zet GF_AUTH_ANONYMOUS_ENABLED NIET aan zolang deze middleware er niet
+    # is: dan is de historian publiek zonder enige login. Moet embedding later
+    # wel, dan is de juiste vorm Grafana onder dezelfde hostname op een
+    # path-prefix (GF_SERVER_ROOT_URL=https://milkdemo.${DOMAIN}/grafana/ +
+    # GF_SERVER_SERVE_FROM_SUB_PATH=true + GF_SECURITY_ALLOW_EMBEDDING=true,
+    # router Host(milkdemo) && PathPrefix(/grafana) mét milkdemo-auth, en deze
+    # losse grafana-router weg). Eén credential, same-origin.
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=Host(`grafana.${DOMAIN}`)"
+      - "traefik.http.routers.grafana.entrypoints=websecure"
+      - "traefik.http.routers.grafana.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.grafana.middlewares=milkdemo-auth"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
     depends_on:
       vla-tdengine:
         condition: service_healthy

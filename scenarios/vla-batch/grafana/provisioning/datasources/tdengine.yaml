@@ -1,23 +1,49 @@
 apiVersion: 1
 
-# TDengine datasource for the Vla Batch demo.
-# Requires the official TDengine Grafana plugin. Install via env on the Grafana container:
-#   GF_INSTALL_PLUGINS=tdengine-datasource
-# (plugin id "tdengine-datasource" — TDengine.com official). The plugin talks to
-# taosAdapter's REST endpoint on :6041, same host the tdengine-poc/bridge.py writes to.
+# Datasources for the Vla Batch demo.
+#
+# Both plugins are installed by the grafana override in docker-compose.vla.yml:
+#   GF_INSTALL_PLUGINS=marcusolsson-json-datasource,tdengine-datasource
 datasources:
+
+  # ---------------------------------------------------------------- historian
+  # TDengine (vla-tdengine, OSS) — everything the bridge wrote from MQTT
+  # DairyWorks/Vla/# into idp.telemetry. taosAdapter REST on :6041.
+  #
+  # ⚠ WHY basicAuth AND NOT jsonData.user + secureJsonData.password:
+  # plugin 3.x uses Grafana's standard HTTP settings. Its health check runs
+  # `select server_version()` against ${url}/rest/sql using Grafana's own
+  # basic-auth header. With jsonData.user/secureJsonData.password no
+  # Authorization header is sent at all, and taosAdapter answers
+  # 401 Unauthorized — which is exactly what /api/datasources/<id>/health
+  # reported. The credentials were never wrong, the keys were.
   - name: TDengine
     type: tdengine-datasource
-    uid: vla-tdengine
+    uid: vla-tdengine            # LOCK — dashboards reference this uid
+    orgId: 1
     access: proxy
-    # Host = container-naam vla-tdengine (niet 'tdengine'); taosAdapter REST :6041.
     url: http://vla-tdengine:6041
     isDefault: true
-    jsonData:
-      url: http://vla-tdengine:6041
-      user: root
-      # database is selected per-query via the super-table name; default db = idp
+    basicAuth: true
+    basicAuthUser: root
     secureJsonData:
-      # env-interpolatie — echte waarde uit .env TD_PASS (niet in git).
-      password: ${TD_PASS}
+      # env interpolation; real value comes from .env TD_PASS (not in git)
+      basicAuthPassword: ${TD_PASS}
+    jsonData:
+      # duplicate of `url` above: older plugin builds read the query URL here.
+      url: http://vla-tdengine:6041
+    editable: true
+
+  # ---------------------------------------------------------------------- MES
+  # batch-engine REST — orders, OEE, verdicts, inventory, equipment health.
+  # None of that lives in the historian; it is MongoDB behind the FastAPI.
+  # Reachable because grafana and vla-batch-engine share idp-network, and the
+  # engine REST is internal-only so it carries no auth of its own.
+  - name: Batch Engine
+    type: marcusolsson-json-datasource
+    uid: vla-batch-engine        # LOCK — dashboards reference this uid
+    orgId: 1
+    access: proxy
+    url: http://vla-batch-engine:8000/api/v1
+    isDefault: false
     editable: true

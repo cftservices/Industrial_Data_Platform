@@ -1,0 +1,1589 @@
+{
+  "uid": "vla-line",
+  "id": null,
+  "version": 2,
+  "title": "VLA Line — Live (DairyWorks)",
+  "description": "Live line view of the DairyWorks vla batch demo, read from the TDengine historian (idp.telemetry, fed by the MQTT bridge from DairyWorks/Vla/#). Setpoints (cook 88 C, cool 22 C, hold 300 s) and dose targets are drawn from the recipe in factory/physics.py, not from the UNS: those tags barely change so they carry no usable history.",
+  "tags": [
+    "vla-batch",
+    "dairyworks",
+    "milkdemo"
+  ],
+  "timezone": "Europe/Amsterdam",
+  "editable": true,
+  "graphTooltip": 1,
+  "refresh": "5s",
+  "schemaVersion": 39,
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Batch state",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(`valuestr`) as batch_state from idp.telemetry where `topic`='DairyWorks/Vla/Batch/Status/state'"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "IDLE": {
+                  "text": "IDLE",
+                  "color": "#6b7280",
+                  "index": 0
+                },
+                "DOSING": {
+                  "text": "DOSING",
+                  "color": "#3b82f6",
+                  "index": 1
+                },
+                "COOKING": {
+                  "text": "COOKING",
+                  "color": "#f59e0b",
+                  "index": 2
+                },
+                "COOLING": {
+                  "text": "COOLING",
+                  "color": "#06b6d4",
+                  "index": 3
+                },
+                "FILLING": {
+                  "text": "FILLING",
+                  "color": "#22c55e",
+                  "index": 4
+                },
+                "COMPLETE": {
+                  "text": "COMPLETE",
+                  "color": "#a855f7",
+                  "index": 5
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Operation",
+      "gridPos": {
+        "x": 4,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(`valuestr`) as operation_name from idp.telemetry where `topic`='DairyWorks/Vla/Batch/Status/operation'"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "Preparation": {
+                  "text": "Preparation",
+                  "color": "#3b82f6",
+                  "index": 0
+                },
+                "Processing": {
+                  "text": "Processing",
+                  "color": "#f59e0b",
+                  "index": 1
+                },
+                "Packaging": {
+                  "text": "Packaging",
+                  "color": "#22c55e",
+                  "index": 2
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Cook temperature",
+      "description": "Setpoint is 88 C (recipe).",
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(`value`) as cook_temp_c from idp.telemetry where `topic`='DairyWorks/Vla/Cook/cook-unit-01/Status/temp_C'"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 85
+              },
+              {
+                "color": "red",
+                "value": 90
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "gauge",
+      "title": "Cook hold",
+      "description": "Hold runs to 300 process-seconds; at TIME_SCALE 15 that is about 20 real seconds.",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(`value`) as hold_s from idp.telemetry where `topic`='DairyWorks/Vla/Cook/cook-unit-01/Status/hold_elapsed_sec'"
+        }
+      ],
+      "options": {
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 0,
+          "min": 0,
+          "max": 300,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 300
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "type": "gauge",
+      "title": "End viscosity (the Solve)",
+      "description": "Spec 150-300 cP. Below 150 is under spec: the batch was under-cooked.",
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(`value`) as visc_cp from idp.telemetry where `topic`='DairyWorks/Vla/Cook/cook-unit-01/Status/viscosity_cP'"
+        }
+      ],
+      "options": {
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "min": 0,
+          "max": 350,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 150
+              },
+              {
+                "color": "yellow",
+                "value": 300
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "type": "gauge",
+      "title": "Packs filled (1 L)",
+      "description": "Target is 5000 packs: recipe base_L 5000 at 1 L per pack.",
+      "gridPos": {
+        "x": 20,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(`value`) as packs from idp.telemetry where `topic`='DairyWorks/Vla/Filling/filler-01/Status/packs_total'"
+        }
+      ],
+      "options": {
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "max": 5000,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 5000
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 10,
+      "type": "state-timeline",
+      "title": "Batch lifecycle",
+      "description": "Every batch in the window side by side. The HTML demo only shows the current step; this shows how long each phase actually took. Each phase runs about 30 s, a full batch about 120 s. Both rows come straight from the factory over OPC-UA, so they fill regardless of whether the MES is involved.",
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 24,
+        "h": 4
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, last(`valuestr`) as line_state from idp.telemetry where `topic`='DairyWorks/Vla/Batch/Status/state' and _ts >= $from and _ts <= $to interval(10s) fill(prev)"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, last(`valuestr`) as mix_phase from idp.telemetry where `topic`='DairyWorks/Vla/Mixing/process-tank-01/Status/phase' and _ts >= $from and _ts <= $to interval(10s) fill(prev)"
+        }
+      ],
+      "options": {
+        "mergeValues": true,
+        "showValue": "auto",
+        "rowHeight": 0.85,
+        "alignValue": "center",
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 0,
+            "fillOpacity": 85
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "IDLE": {
+                  "text": "IDLE",
+                  "color": "#6b7280",
+                  "index": 0
+                },
+                "DOSING": {
+                  "text": "DOSING",
+                  "color": "#3b82f6",
+                  "index": 1
+                },
+                "COOKING": {
+                  "text": "COOKING",
+                  "color": "#f59e0b",
+                  "index": 2
+                },
+                "COOLING": {
+                  "text": "COOLING",
+                  "color": "#06b6d4",
+                  "index": 3
+                },
+                "FILLING": {
+                  "text": "FILLING",
+                  "color": "#22c55e",
+                  "index": 4
+                },
+                "COMPLETE": {
+                  "text": "COMPLETE",
+                  "color": "#a855f7",
+                  "index": 5
+                },
+                "idle": {
+                  "text": "idle",
+                  "color": "#6b7280",
+                  "index": 6
+                },
+                "dosing": {
+                  "text": "dosing",
+                  "color": "#3b82f6",
+                  "index": 7
+                },
+                "cooking": {
+                  "text": "cooking",
+                  "color": "#f59e0b",
+                  "index": 8
+                },
+                "cooling": {
+                  "text": "cooling",
+                  "color": "#06b6d4",
+                  "index": 9
+                },
+                "filling": {
+                  "text": "filling",
+                  "color": "#22c55e",
+                  "index": 10
+                },
+                "complete": {
+                  "text": "complete",
+                  "color": "#a855f7",
+                  "index": 11
+                },
+                "Running": {
+                  "text": "Running",
+                  "color": "#22c55e",
+                  "index": 12
+                },
+                "Idle": {
+                  "text": "Idle",
+                  "color": "#6b7280",
+                  "index": 13
+                },
+                "Allocated": {
+                  "text": "Allocated",
+                  "color": "#3b82f6",
+                  "index": 14
+                },
+                "Dirty": {
+                  "text": "Dirty",
+                  "color": "#c2410c",
+                  "index": 15
+                },
+                "Cleaning": {
+                  "text": "Cleaning",
+                  "color": "#38bdf8",
+                  "index": 16
+                },
+                "Down": {
+                  "text": "Down",
+                  "color": "#ef4444",
+                  "index": 17
+                },
+                "Error": {
+                  "text": "Error",
+                  "color": "#ef4444",
+                  "index": 18
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 11,
+      "type": "state-timeline",
+      "title": "Equipment states (MES)",
+      "description": "Published by the batch-engine, not by the factory. It therefore only fills for batches that were started through the MES (Orders tab or POST /orders/{id}/batches). A batch started straight on the factory shows up in the lifecycle row above but leaves this panel empty — that is expected, not a broken feed.",
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 24,
+        "h": 5
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, last(`valuestr`) as recv_state from idp.telemetry where `topic`='DairyWorks/Vla/Receiving/receiving-tank-01/Status/state' and _ts >= $from and _ts <= $to interval(10s) fill(prev)"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, last(`valuestr`) as mix_state from idp.telemetry where `topic`='DairyWorks/Vla/Mixing/process-tank-01/Status/state' and _ts >= $from and _ts <= $to interval(10s) fill(prev)"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, last(`valuestr`) as cook_state from idp.telemetry where `topic`='DairyWorks/Vla/Cook/cook-unit-01/Status/state' and _ts >= $from and _ts <= $to interval(10s) fill(prev)"
+        },
+        {
+          "refId": "D",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, last(`valuestr`) as cool_state from idp.telemetry where `topic`='DairyWorks/Vla/Cooling/cooler-01/Status/state' and _ts >= $from and _ts <= $to interval(10s) fill(prev)"
+        },
+        {
+          "refId": "E",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, last(`valuestr`) as fill_state from idp.telemetry where `topic`='DairyWorks/Vla/Filling/filler-01/Status/state' and _ts >= $from and _ts <= $to interval(10s) fill(prev)"
+        }
+      ],
+      "options": {
+        "mergeValues": true,
+        "showValue": "auto",
+        "rowHeight": 0.85,
+        "alignValue": "center",
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 0,
+            "fillOpacity": 85
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "Running": {
+                  "text": "Running",
+                  "color": "#22c55e",
+                  "index": 0
+                },
+                "Idle": {
+                  "text": "Idle",
+                  "color": "#6b7280",
+                  "index": 1
+                },
+                "Allocated": {
+                  "text": "Allocated",
+                  "color": "#3b82f6",
+                  "index": 2
+                },
+                "Dirty": {
+                  "text": "Dirty",
+                  "color": "#c2410c",
+                  "index": 3
+                },
+                "Cleaning": {
+                  "text": "Cleaning",
+                  "color": "#38bdf8",
+                  "index": 4
+                },
+                "Down": {
+                  "text": "Down",
+                  "color": "#ef4444",
+                  "index": 5
+                },
+                "Error": {
+                  "text": "Error",
+                  "color": "#ef4444",
+                  "index": 6
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Temperatures — cook / mix / cool",
+      "description": "Dashed lines are the recipe setpoints: 88 C cook, 22 C cool target. Those come from physics.py RECIPES, not from the UNS — setpoint_C and target_C barely change so they carry no usable history.",
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 12,
+        "h": 9
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, avg(`value`) as cook_c from idp.telemetry where `topic`='DairyWorks/Vla/Cook/cook-unit-01/Status/temp_C' and _ts >= $from and _ts <= $to interval(5s) fill(prev)"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, avg(`value`) as mix_c from idp.telemetry where `topic`='DairyWorks/Vla/Mixing/process-tank-01/Status/temp_C' and _ts >= $from and _ts <= $to interval(5s) fill(prev)"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, avg(`value`) as cool_c from idp.telemetry where `topic`='DairyWorks/Vla/Cooling/cooler-01/Status/temp_C' and _ts >= $from and _ts <= $to interval(5s) fill(prev)"
+        }
+      ],
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "decimals": 1,
+          "min": 0,
+          "max": 100,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 6,
+            "spanNulls": true,
+            "showPoints": "never",
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "#38bdf8",
+                "value": 22
+              },
+              {
+                "color": "#ef4444",
+                "value": 88
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Viscosity vs spec (the Solve)",
+      "description": "Red zone below 150 cP is under spec. That is the same trigger as the SOLVE banner on the milkdemo.",
+      "gridPos": {
+        "x": 12,
+        "y": 13,
+        "w": 12,
+        "h": 9
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, avg(`value`) as visc_cp from idp.telemetry where `topic`='DairyWorks/Vla/Cook/cook-unit-01/Status/viscosity_cP' and _ts >= $from and _ts <= $to interval(5s) fill(prev)"
+        }
+      ],
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "min": 0,
+          "max": 350,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 3,
+            "fillOpacity": 12,
+            "spanNulls": true,
+            "showPoints": "never",
+            "thresholdsStyle": {
+              "mode": "dashed+area"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 150
+              },
+              {
+                "color": "yellow",
+                "value": 300
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 30,
+      "type": "bargauge",
+      "title": "Dosing — actual vs recipe target",
+      "description": "Targets (5000 / 500 / 250 / 100 kg) come from the recipe. dose_*_setpoint_kg is never published to the UNS, so it cannot be read from the historian.",
+      "gridPos": {
+        "x": 0,
+        "y": 22,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(`value`) as milk_kg from idp.telemetry where `topic`='DairyWorks/Vla/Mixing/process-tank-01/Status/dose_milk_actual_kg'"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(`value`) as sugar_kg from idp.telemetry where `topic`='DairyWorks/Vla/Mixing/process-tank-01/Status/dose_sugar_actual_kg'"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(`value`) as starch_kg from idp.telemetry where `topic`='DairyWorks/Vla/Mixing/process-tank-01/Status/dose_starch_actual_kg'"
+        },
+        {
+          "refId": "D",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(`value`) as cocoa_kg from idp.telemetry where `topic`='DairyWorks/Vla/Mixing/process-tank-01/Status/dose_cocoa_actual_kg'"
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "minVizWidth": 0,
+        "minVizHeight": 16,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "masskg",
+          "decimals": 0,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "milk_kg"
+            },
+            "properties": [
+              {
+                "id": "max",
+                "value": 5000
+              },
+              {
+                "id": "displayName",
+                "value": "Milk"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "sugar_kg"
+            },
+            "properties": [
+              {
+                "id": "max",
+                "value": 500
+              },
+              {
+                "id": "displayName",
+                "value": "Sugar"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "starch_kg"
+            },
+            "properties": [
+              {
+                "id": "max",
+                "value": 250
+              },
+              {
+                "id": "displayName",
+                "value": "Starch"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cocoa_kg"
+            },
+            "properties": [
+              {
+                "id": "max",
+                "value": 100
+              },
+              {
+                "id": "displayName",
+                "value": "Cocoa"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "Dose progress (% of recipe target)",
+      "description": "Divided by the recipe target so cocoa (100 kg) and milk (5000 kg) share one scale. All four dose in parallel and finish together — by design, not a stalled line.",
+      "gridPos": {
+        "x": 8,
+        "y": 22,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, avg(`value`)*100/5000 as milk_pct from idp.telemetry where `topic`='DairyWorks/Vla/Mixing/process-tank-01/Status/dose_milk_actual_kg' and _ts >= $from and _ts <= $to interval(5s) fill(prev)"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, avg(`value`)*100/500 as sugar_pct from idp.telemetry where `topic`='DairyWorks/Vla/Mixing/process-tank-01/Status/dose_sugar_actual_kg' and _ts >= $from and _ts <= $to interval(5s) fill(prev)"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, avg(`value`)*100/250 as starch_pct from idp.telemetry where `topic`='DairyWorks/Vla/Mixing/process-tank-01/Status/dose_starch_actual_kg' and _ts >= $from and _ts <= $to interval(5s) fill(prev)"
+        },
+        {
+          "refId": "D",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, avg(`value`)*100/100 as cocoa_pct from idp.telemetry where `topic`='DairyWorks/Vla/Mixing/process-tank-01/Status/dose_cocoa_actual_kg' and _ts >= $from and _ts <= $to interval(5s) fill(prev)"
+        }
+      ],
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 0,
+          "min": 0,
+          "max": 105,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "spanNulls": true,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 32,
+      "type": "timeseries",
+      "title": "Tank level & cook hold",
+      "description": "Level is the batch volume in litres (recipe base_L, ramped with dosing progress). The hold sawtooth climbs to 300 process-seconds once per batch.",
+      "gridPos": {
+        "x": 16,
+        "y": 22,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, avg(`value`) as level_l from idp.telemetry where `topic`='DairyWorks/Vla/Mixing/process-tank-01/Status/level_L' and _ts >= $from and _ts <= $to interval(5s) fill(prev)"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, avg(`value`) as hold_s from idp.telemetry where `topic`='DairyWorks/Vla/Cook/cook-unit-01/Status/hold_elapsed_sec' and _ts >= $from and _ts <= $to interval(5s) fill(prev)"
+        }
+      ],
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "litre",
+          "decimals": 0,
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": true,
+            "showPoints": "never"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "hold_s"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 40,
+      "type": "timeseries",
+      "title": "Packs per batch",
+      "description": "packs_total resets each batch, so you get one sawtooth per run. One glance shows which batch did not fill to 5000.",
+      "gridPos": {
+        "x": 0,
+        "y": 30,
+        "w": 10,
+        "h": 8
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, max(`value`) as packs from idp.telemetry where `topic`='DairyWorks/Vla/Filling/filler-01/Status/packs_total' and _ts >= $from and _ts <= $to interval(5s) fill(prev)"
+        }
+      ],
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "spanNulls": true,
+            "showPoints": "never",
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "#22c55e",
+                "value": 5000
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 41,
+      "type": "timeseries",
+      "title": "Line speed (packs / min)",
+      "description": "Derived from the counter delta per minute. A batch change inside one bucket resets the counter, so that bucket reads low — at about 120 s per batch that happens roughly every other bucket.",
+      "gridPos": {
+        "x": 10,
+        "y": 30,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, max(`value`)-min(`value`) as packs_per_min from idp.telemetry where `topic`='DairyWorks/Vla/Filling/filler-01/Status/packs_total' and _ts >= $from and _ts <= $to interval(1m) fill(value, 0)"
+        }
+      ],
+      "options": {
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#22c55e"
+          },
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 70,
+            "barAlignment": 0,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 42,
+      "type": "stat",
+      "title": "Pallets",
+      "description": "1200 packs per pallet, same size as the operator tab default.",
+      "gridPos": {
+        "x": 18,
+        "y": 30,
+        "w": 3,
+        "h": 8
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(`value`)/1200 as pallets from idp.telemetry where `topic`='DairyWorks/Vla/Filling/filler-01/Status/packs_total'"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 43,
+      "type": "stat",
+      "title": "Batches completed",
+      "description": "Within the selected window. The milkdemo cannot tell you this.",
+      "gridPos": {
+        "x": 21,
+        "y": 30,
+        "w": 3,
+        "h": 8
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select count(*) as batches_done from idp.telemetry where `topic`='DairyWorks/Vla/Batch/Status/state' and `valuestr`='COMPLETE' and _ts >= $from and _ts <= $to"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "purple",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 50,
+      "type": "table",
+      "title": "Batch & equipment events",
+      "description": "Explicit topic list rather than a LIKE: a wildcard would force TDengine through all 71 sub-tables including the 5.3 M agitator rows, every refresh.",
+      "gridPos": {
+        "x": 0,
+        "y": 38,
+        "w": 24,
+        "h": 9
+      },
+      "datasource": {
+        "type": "tdengine-datasource",
+        "uid": "vla-tdengine"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tdengine-datasource",
+            "uid": "vla-tdengine"
+          },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select _ts as event_ts, `topic` as topic_name, `valuestr` as event_value from idp.telemetry where `topic` in ('DairyWorks/Vla/Batch/Status/state','DairyWorks/Vla/Batch/Status/operation','DairyWorks/Vla/Batch/Status/batch_id','DairyWorks/Vla/Batch/Status/active_recipe','DairyWorks/Vla/Mixing/process-tank-01/Status/phase','DairyWorks/Vla/Receiving/receiving-tank-01/Status/state','DairyWorks/Vla/Mixing/process-tank-01/Status/state','DairyWorks/Vla/Cook/cook-unit-01/Status/state','DairyWorks/Vla/Cooling/cooler-01/Status/state','DairyWorks/Vla/Filling/filler-01/Status/state') and _ts >= $from and _ts <= $to order by _ts desc limit 300"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "event_ts"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Time"
+              },
+              {
+                "id": "unit",
+                "value": "time:HH:mm:ss"
+              },
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "topic_name"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Topic"
+              },
+              {
+                "id": "custom.width",
+                "value": 520
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "event_value"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Value"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

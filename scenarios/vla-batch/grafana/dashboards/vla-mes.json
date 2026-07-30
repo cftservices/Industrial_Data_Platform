@@ -1,0 +1,1343 @@
+{
+  "uid": "vla-mes",
+  "id": null,
+  "version": 2,
+  "title": "VLA MES — engineering view (NOT source of truth)",
+  "description": "Internal engineering view. Recomputes MES figures from the batch-engine REST to establish what the data supports; input for batch-engine/vla/kpi.py in phase 4. NOT the source of truth: no screen and no report reads from here. KPIs are owned by GET /api/v1/kpi/summary and report/period.",
+  "tags": [
+    "vla-batch",
+    "dairyworks",
+    "internal",
+    "engineering"
+  ],
+  "timezone": "Europe/Amsterdam",
+  "editable": true,
+  "graphTooltip": 0,
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "annotations": {
+    "list": []
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "days",
+        "label": "Period (days)",
+        "type": "custom",
+        "query": "1,7,30",
+        "current": {
+          "text": "7",
+          "value": "7"
+        },
+        "options": [
+          {
+            "text": "1",
+            "value": "1",
+            "selected": false
+          },
+          {
+            "text": "7",
+            "value": "7",
+            "selected": true
+          },
+          {
+            "text": "30",
+            "value": "30",
+            "selected": false
+          }
+        ],
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 999,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 3
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "## ⚠️ Engineering view — **not the source of truth**\n\nThese figures are recomputed here from the batch-engine REST purely to explore what the data supports. **No screen and no report may read from this dashboard.** A KPI has exactly one place where it is calculated: `GET /api/v1/kpi/summary` and `report/period`, fed by `batch-engine/vla/kpi.py` (phase 4). Two sources computing OEE inevitably produce two different numbers.\n\nFor the live line and ad-hoc time-series exploration, use [VLA Line — Live](/d/vla-line)."
+      }
+    },
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Batches in period",
+      "gridPos": {
+        "x": 0,
+        "y": 3,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/report/period",
+          "queryParams": "days=$days",
+          "cacheDurationSeconds": 0,
+          "fields": [
+            {
+              "jsonPath": "$.batches_total",
+              "name": "batches",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "purple",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Yield",
+      "description": "Packs booked against planned litres. Above 100% means the batch produced more packs than the order asked for.",
+      "gridPos": {
+        "x": 4,
+        "y": 3,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/report/period",
+          "queryParams": "days=$days",
+          "cacheDurationSeconds": 0,
+          "fields": [
+            {
+              "jsonPath": "$.yield_pct",
+              "name": "yield_pct",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 90
+              },
+              {
+                "color": "green",
+                "value": 98
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Hold / reject ratio",
+      "description": "Share of batches that did not come out APPROVED.",
+      "gridPos": {
+        "x": 8,
+        "y": 3,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/report/period",
+          "queryParams": "days=$days",
+          "cacheDurationSeconds": 0,
+          "fields": [
+            {
+              "jsonPath": "$.hold_reject_ratio",
+              "name": "hold_reject",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.05
+              },
+              {
+                "color": "red",
+                "value": 0.2
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Packs produced",
+      "gridPos": {
+        "x": 12,
+        "y": 3,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/inventory",
+          "queryParams": "",
+          "cacheDurationSeconds": 0,
+          "fields": [
+            {
+              "jsonPath": "$.produced_packs",
+              "name": "packs",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Volume produced",
+      "gridPos": {
+        "x": 16,
+        "y": 3,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/inventory",
+          "queryParams": "",
+          "cacheDurationSeconds": 0,
+          "fields": [
+            {
+              "jsonPath": "$.produced_L",
+              "name": "litres",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "litre",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Materials below reorder",
+      "gridPos": {
+        "x": 20,
+        "y": 3,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/inventory",
+          "queryParams": "",
+          "cacheDurationSeconds": 0,
+          "fields": [
+            {
+              "jsonPath": "$.materials[?(@.below_reorder == true)].material_id",
+              "name": "low_material",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": [
+            "count"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 10,
+      "type": "bargauge",
+      "title": "Verdict distribution",
+      "description": "From /report/period over the selected window.",
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 8,
+        "h": 7
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/report/period",
+          "queryParams": "days=$days",
+          "cacheDurationSeconds": 0,
+          "fields": [
+            {
+              "jsonPath": "$.batches_by_verdict.APPROVED",
+              "name": "APPROVED",
+              "type": "number"
+            },
+            {
+              "jsonPath": "$.batches_by_verdict.HOLD",
+              "name": "HOLD",
+              "type": "number"
+            },
+            {
+              "jsonPath": "$.batches_by_verdict.REJECTED",
+              "name": "REJECTED",
+              "type": "number"
+            },
+            {
+              "jsonPath": "$.batches_by_verdict.PENDING",
+              "name": "PENDING",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "minVizWidth": 0,
+        "minVizHeight": 16,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "APPROVED"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "HOLD"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "REJECTED"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "PENDING"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "text"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 11,
+      "type": "table",
+      "title": "OEE per equipment",
+      "gridPos": {
+        "x": 8,
+        "y": 7,
+        "w": 16,
+        "h": 7
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/oee",
+          "queryParams": "",
+          "cacheDurationSeconds": 0,
+          "fields": [
+            {
+              "jsonPath": "$[*].equipment_id",
+              "name": "Equipment",
+              "type": "string"
+            },
+            {
+              "jsonPath": "$[*].availability",
+              "name": "Availability",
+              "type": "number"
+            },
+            {
+              "jsonPath": "$[*].performance",
+              "name": "Performance",
+              "type": "number"
+            },
+            {
+              "jsonPath": "$[*].quality",
+              "name": "Quality",
+              "type": "number"
+            },
+            {
+              "jsonPath": "$[*].oee",
+              "name": "OEE",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1,
+          "custom": {
+            "align": "auto",
+            "filterable": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Equipment"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "custom.width",
+                "value": 220
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "OEE"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "gradient"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 0.6
+                    },
+                    {
+                      "color": "green",
+                      "value": 0.85
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 20,
+      "type": "table",
+      "title": "Orders",
+      "description": "Planned (L) is the sum of the batches' planned volume; Produced (L) is the actual yield. They differ as soon as a batch under-fills.",
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 24,
+        "h": 10
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/orders",
+          "queryParams": "",
+          "cacheDurationSeconds": 0,
+          "fields": [
+            {
+              "jsonPath": "$[*].order_id",
+              "name": "Order",
+              "type": "string"
+            },
+            {
+              "jsonPath": "$[*].status",
+              "name": "Status",
+              "type": "string"
+            },
+            {
+              "jsonPath": "$[*].target_qty_L",
+              "name": "Target (L)",
+              "type": "number"
+            },
+            {
+              "jsonPath": "$[*].progress.batched_L",
+              "name": "Planned (L)",
+              "type": "number"
+            },
+            {
+              "jsonPath": "$[*].progress.produced_L",
+              "name": "Produced (L)",
+              "type": "number"
+            },
+            {
+              "jsonPath": "$[*].progress.produced_packs",
+              "name": "Packs",
+              "type": "number"
+            },
+            {
+              "jsonPath": "$[*].progress.progress_pct",
+              "name": "Progress",
+              "type": "number"
+            },
+            {
+              "jsonPath": "$[*].progress.batches_count",
+              "name": "Batches",
+              "type": "number"
+            },
+            {
+              "jsonPath": "$[*].created_at",
+              "name": "Created",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        },
+        "sortBy": [
+          {
+            "displayName": "Created",
+            "desc": true
+          }
+        ]
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Order"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 190
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Status"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 110
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "OPEN": {
+                        "text": "OPEN",
+                        "color": "text",
+                        "index": 0
+                      },
+                      "RUNNING": {
+                        "text": "RUNNING",
+                        "color": "green",
+                        "index": 1
+                      },
+                      "DONE": {
+                        "text": "DONE",
+                        "color": "blue",
+                        "index": 2
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Progress"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "gauge",
+                  "mode": "gradient"
+                }
+              },
+              {
+                "id": "max",
+                "value": 120
+              },
+              {
+                "id": "min",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 30,
+      "type": "table",
+      "title": "Ingredient stock & consumption",
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 12,
+        "h": 9
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/inventory",
+          "queryParams": "",
+          "cacheDurationSeconds": 0,
+          "fields": [
+            {
+              "jsonPath": "$.materials[*].name",
+              "name": "Material",
+              "type": "string"
+            },
+            {
+              "jsonPath": "$.materials[*].category",
+              "name": "Category",
+              "type": "string"
+            },
+            {
+              "jsonPath": "$.materials[*].stock_qty",
+              "name": "Stock",
+              "type": "number"
+            },
+            {
+              "jsonPath": "$.materials[*].reorder_level",
+              "name": "Reorder",
+              "type": "number"
+            },
+            {
+              "jsonPath": "$.materials[*].stock_pct",
+              "name": "Stock %",
+              "type": "number"
+            },
+            {
+              "jsonPath": "$.materials[*].consumed_total",
+              "name": "Consumed",
+              "type": "number"
+            },
+            {
+              "jsonPath": "$.materials[*].batches_count",
+              "name": "Batches",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "custom": {
+            "align": "auto",
+            "filterable": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Material"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 180
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Stock"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "text",
+                      "value": 0
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Stock %"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "gauge",
+                  "mode": "gradient"
+                }
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 300
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 100
+                    },
+                    {
+                      "color": "green",
+                      "value": 150
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Consumed"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 31,
+      "type": "table",
+      "title": "Equipment health & CIP",
+      "description": "Cook unit flips to Dirty after 4 batches without a CIP; create_batch then refuses new work until a CIP is run.",
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 12,
+        "h": 9
+      },
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "vla-batch-engine"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "vla-batch-engine"
+          },
+          "method": "GET",
+          "urlPath": "/equipment/health",
+          "queryParams": "",
+          "cacheDurationSeconds": 0,
+          "fields": [
+            {
+              "jsonPath": "$[*].equipment_id",
+              "name": "Equipment",
+              "type": "string"
+            },
+            {
+              "jsonPath": "$[*].area",
+              "name": "Area",
+              "type": "string"
+            },
+            {
+              "jsonPath": "$[*].state",
+              "name": "State",
+              "type": "string"
+            },
+            {
+              "jsonPath": "$[*].batches_since_cip",
+              "name": "Since CIP",
+              "type": "number"
+            },
+            {
+              "jsonPath": "$[*].running_hours",
+              "name": "Running hours",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "custom": {
+            "align": "auto",
+            "filterable": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Equipment"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 190
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "State"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "Running": {
+                        "text": "Running",
+                        "color": "green",
+                        "index": 0
+                      },
+                      "Idle": {
+                        "text": "Idle",
+                        "color": "text",
+                        "index": 1
+                      },
+                      "Allocated": {
+                        "text": "Allocated",
+                        "color": "blue",
+                        "index": 2
+                      },
+                      "Dirty": {
+                        "text": "Dirty",
+                        "color": "dark-orange",
+                        "index": 3
+                      },
+                      "Down": {
+                        "text": "Down",
+                        "color": "red",
+                        "index": 4
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Since CIP"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "gradient"
+                }
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 4
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 3
+                    },
+                    {
+                      "color": "red",
+                      "value": 4
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Running hours"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "h"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

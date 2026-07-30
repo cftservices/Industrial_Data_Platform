@@ -484,11 +484,15 @@ async function loadDoseTargets(){
   if(_doseCtx.loading) return;
   _doseCtx.loading = true;
   try{
-    const list = await j('/batches');
+    const raw = await j('/batches');
+    const list = Array.isArray(raw) ? raw : [];
     // Match on the MES batch id (B-…). Do NOT use batchStatus(tags,'batch_id'):
     // that is the factory's own id (VLA-…) and will never match.
-    const active = (Array.isArray(list)?list:[])
-      .find(b => ACTIVE_STATES.includes(String(b.state||'').toUpperCase()));
+    // Fall back to the most recent batch when nothing is running: the line sits
+    // at COMPLETE between runs, and without this the cards would show "target —"
+    // almost all of the time.
+    const active = list.find(b => ACTIVE_STATES.includes(String(b.state||'').toUpperCase()))
+      || list.slice().sort((a,b)=>String(b.started_at||'').localeCompare(String(a.started_at||'')))[0];
     if(!active){ _doseCtx.batchId=null; _doseCtx.targets={}; _doseCtx.plannedL=null; return; }
     if(active.batch_id === _doseCtx.batchId) return;   // already cached
     const b = await j('/batches/'+encodeURIComponent(active.batch_id));
@@ -565,9 +569,10 @@ async function refreshSales(){
   $('#rejects').textContent = fmt(tagVal(tags,'Filling','filler-01','reject_count'),'',0);
   renderFilling(tags, packs, state);
 
-  // dosing progress — actuals from the UNS, targets from the MES
-  if(ACTIVE_STATES.includes(state)) loadDoseTargets();
-  else if(state==='IDLE'){ _doseCtx.batchId=null; _doseCtx.targets={}; _doseCtx.plannedL=null; }
+  // dosing progress — actuals from the UNS, targets from the MES.
+  // Always load: loadDoseTargets() falls back to the most recent batch, so the
+  // cards keep their targets while the line sits at COMPLETE between runs.
+  loadDoseTargets();
   renderDoseCards(tags);
 }
 
