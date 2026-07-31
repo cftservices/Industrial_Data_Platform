@@ -79,6 +79,13 @@ def assemble_period_report(db, days: int) -> dict:
     cbm_alerts = [a for a in db.dw_cbm_alerts.find({})
                   if _in_window(a.get("ts"), cutoff)]
 
+    # PR-38: het verliesblok komt uit kpi.compute_losses, niet uit een eigen
+    # rekensom hier. Scherm en PDF moeten gegarandeerd hetzelfde bedrag en
+    # dezelfde rangschikking tonen, en dat kan alleen met een gedeelde bron.
+    from .kpi import compute_losses, load_cost_model  # lokaal: geen cyclus
+    losses = compute_losses(db, cutoff, datetime.now(timezone.utc),
+                            load_cost_model())
+
     return {
         "report_type": "Management Report",
         "window_days": days,
@@ -88,6 +95,7 @@ def assemble_period_report(db, days: int) -> dict:
         "hold_reject_ratio": hold_reject_ratio,
         "downtime_events": downtime_events,
         "cbm_alerts": cbm_alerts,
+        "losses": losses,
         "generated_at": _iso(),
     }
 

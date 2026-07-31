@@ -23,7 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
-from vla import inventory, model as M
+from vla import inventory, kpi as K, model as M
 from vla.batches import BatchRunner
 from vla.bus import VlaBus
 from vla.db import get_db, seed_recipes
@@ -548,6 +548,25 @@ def ack_alarm(alarm_id: str, body: AckRequest):
         code = 404 if "unknown" in str(e) else 409
         raise HTTPException(code, str(e))
     return alarm
+
+
+@app.get(f"{API}/kpi/summary")
+def get_kpi_summary(window: str = Query(default="week"),
+                    compare: bool = Query(default=True)):
+    """PR-36/38: de KPI-set over een venster, met norm-status, delta tegen het
+    vorige venster en het verliesblok. Scherm 11 en 12 lezen hieruit.
+
+    Bewust een `window` in plaats van `days`: een dienst is niet in dagen uit
+    te drukken en week-op-week is geen 7 dagen vanaf nu. De respons stuurt
+    `from`, `to` en de tijdzone mee, zodat het PDF hetzelfde venster kan
+    aantonen als het scherm."""
+    db = STATE.get("db")
+    if db is None:
+        raise HTTPException(503, "engine not initialized")
+    try:
+        return JSONResponse(K.summary(db, window=window, compare=compare))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @app.get(f"{API}/report/period")
