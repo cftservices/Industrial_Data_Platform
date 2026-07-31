@@ -28,7 +28,9 @@ const TW_COLORS =
 const RULES = [
   {
     id: "hex",
-    re: /#[0-9a-fA-F]{3,8}\b/g,
+    // Niet voorafgegaan door "&": anders vangt de regel HTML-entiteiten zoals
+    // &#8627; (de volgt-uit-pijl) aan voor een kleur. Dat is een teken, geen hex.
+    re: /(?<!&)#[0-9a-fA-F]{3,8}\b/g,
     msg: "hexwaarde in componentcode; gebruik een tier-2 token",
   },
   {
@@ -99,7 +101,17 @@ if (selfTest) {
     console.error(`zelftest MISLUKT, regels vonden niets: ${missed.map((r) => r.id).join(", ")}`);
     process.exit(1);
   }
-  console.log(`zelftest OK: alle ${RULES.length} regels vinden een overtreding in de testregel`);
+  // En het omgekeerde: een HTML-entiteit is geen kleur en mag GEEN treffer
+  // zijn. Zonder deze helft dekt de zelftest alleen vals-negatief af.
+  const hexRule = RULES.find((r) => r.id === "hex");
+  hexRule.re.lastIndex = 0;
+  if (hexRule.re.test("&#8627; &#9660;")) {
+    console.error("zelftest MISLUKT: een HTML-entiteit wordt als hexkleur gezien");
+    process.exit(1);
+  }
+  console.log(
+    `zelftest OK: alle ${RULES.length} regels vinden een overtreding, en een HTML-entiteit niet`,
+  );
 }
 
 if (findings.length) {
