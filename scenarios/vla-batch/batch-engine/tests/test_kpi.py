@@ -301,3 +301,84 @@ def test_summary_reports_its_own_window_contract():
     assert out["shift_hours"] == kpi.SHIFT_HOURS
     assert len(out["kpis"]) == len(kpi.KPI_DEFS)
     assert "losses" in out
+
+
+# ------------------------------------------------------------- massabalans-yield
+
+DENSITY = 1.03
+
+
+def test_mass_yield_is_not_plan_attainment():
+    """De twee meten echt iets anders: plan-realisatie deelt door een
+    planningsgetal, yield door de werkelijke materiaalinzet."""
+    db = _seeded_db(n_ok=2, n_bad=1)
+    win = kpi.window_bounds("week")
+    y, ymeta = kpi._mass_yield(db, *win, DENSITY)
+    p, _ = kpi._plan_attainment(db, *win)
+    assert y is not None and p is not None
+    assert y != p
+    assert ymeta["kg_in"] > 0 and ymeta["kg_out"] > 0
+
+
+def test_mass_yield_is_below_hundred_percent():
+    """5850 kg grondstof levert 5000 L product: het verschil is indamping. Een
+    yield boven 100 procent zou betekenen dat er massa uit het niets komt."""
+    db = _seeded_db(n_ok=3)
+    value, meta = kpi._mass_yield(db, *kpi.window_bounds("week"), DENSITY)
+    assert value is not None
+    assert 70.0 < value < 100.0, f"onwaarschijnlijke yield {value}"
+    assert "note" not in meta
+
+
+def test_mass_yield_unset_without_density():
+    value, meta = kpi._mass_yield(db=_seeded_db(), start=kpi.window_bounds("week")[0],
+                                  end=kpi.window_bounds("week")[1], density=None)
+    assert value is None
+    assert "density" in meta["reason"] or "dichtheid" in meta["reason"]
+
+
+def test_mass_yield_in_the_kpi_set():
+    db = _seeded_db()
+    rows = {r["kpi_id"]: r for r in
+            kpi.compute_kpis(db, window="week", compare=False,
+                             model={"product_density_kg_L": DENSITY})}
+    assert "mass_yield_pct" in rows
+    assert rows["mass_yield_pct"]["value"] is not None
+
+
+# ---------------------------------------------------------------------- afkeur
+
+def test_scrap_ratio_is_real_now_that_the_factory_rejects():
+    """De fabriek produceert afkeur, dus scrap_ratio mag geen 0.0 meer zijn."""
+    db = _seeded_db(n_ok=2, n_bad=1)
+    value, meta = kpi._scrap_ratio(db, *kpi.window_bounds("week"))
+    assert value is not None
+    assert value > 0.0, "afkeur is gesimuleerd, dus scrap moet meetbaar zijn"
+    assert meta["scrap_qty"] > 0
+
+
+def test_scrap_costs_appear_in_the_loss_block():
+    db = _seeded_db(n_ok=2, n_bad=2)
+    out = kpi.compute_losses(db, *kpi.window_bounds("week"), COST_MODEL)
+    scrap = [i for i in out["items"] if i["category"] == "scrap"]
+    assert scrap, "afkeur moet nu een eigen verliespost opleveren"
+    assert scrap[0]["amount"] > 0
+
+
+def test_zero_amount_losses_are_dropped_not_shown_as_zero():
+    """Een post die op 0,00 afrondt is visueel niet te onderscheiden van 'niet
+    gekalibreerd'. Dat onderscheid moet overeind blijven, dus hij valt weg."""
+    db = _seeded_db(n_ok=2, n_bad=1)
+    out = kpi.compute_losses(db, *kpi.window_bounds("week"), COST_MODEL)
+    assert all(i["amount"] > 0 for i in out["items"])
+
+
+def test_future_time_is_not_counted_as_downtime():
+    """Een lopend venster eindigt in de toekomst. Die tijd doorrekenen als
+    stilstand maakte de benuttingsgraad 0 procent zodra je midden in een week
+    keek."""
+    db = _seeded_db(n_ok=3)
+    start, end = kpi.window_bounds("month")   # eindigt altijd in de toekomst
+    value, _ = kpi._utilization_efficiency(db, start, end)
+    assert value is not None
+    assert value > 0.0, "benutting mag niet naar nul zakken door toekomstige tijd"

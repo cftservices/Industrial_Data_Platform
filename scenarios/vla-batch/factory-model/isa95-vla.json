@@ -500,5 +500,32 @@
     "trigger": "cook-unit-01/Status/viscosity_cP < 150 (te lage peak-temp x hold; fault cook_undertemp)",
     "auto_action": "batch verdict HOLD/REJECTED + critical batch alarm + audit entry",
     "outcome": "Raw data (peak-temp x hold) leidt tot een echte beslissing: vasthouden/herkoken i.p.v. blind afvullen"
-  }
+  },
+  "product_density_kg_L": 1.03,
+  "kpi_targets": [
+    { "kpi_id": "throughput_rate",         "scope": "line", "direction": "higher_is_better",
+      "target": 5200, "warn": 4800, "critical": 4400, "unit": "packs/h" },
+    { "kpi_id": "quality_ratio",           "scope": "line", "direction": "higher_is_better",
+      "target": 97.0, "warn": 94.0, "critical": 90.0, "unit": "%" },
+    { "kpi_id": "scrap_ratio",             "scope": "line", "direction": "lower_is_better",
+      "target": 1.5, "warn": 3.0, "critical": 5.0, "unit": "%" },
+    { "kpi_id": "utilization_efficiency",  "scope": "line", "direction": "higher_is_better",
+      "target": 90.0, "warn": 85.0, "critical": 78.0, "unit": "%" },
+    { "kpi_id": "plan_attainment_pct",     "scope": "line", "direction": "higher_is_better",
+      "target": 98.0, "warn": 95.0, "critical": 90.0, "unit": "%" },
+    { "kpi_id": "mass_yield_pct",          "scope": "line", "direction": "higher_is_better",
+      "target": 90.0, "warn": 87.0, "critical": 83.0, "unit": "%" },
+    { "kpi_id": "capability_cpk",          "scope": "line", "direction": "higher_is_better",
+      "target": 1.33, "warn": 1.00, "critical": 0.80, "unit": "" },
+    { "kpi_id": "otif_pct",                "scope": "line", "direction": "higher_is_better",
+      "target": 95.0, "warn": 90.0, "critical": 80.0, "unit": "%" }
+  ],
+  "cost_model": {
+    "currency": "EUR",
+    "value_per_pack": 0.62,
+    "cost_per_kg_material": { "MILK": 0.48, "SUGAR": 0.85, "STARCH": 1.60, "COCOA": 4.20 },
+    "cost_per_downtime_hour": 450.0,
+    "rework_cost_per_batch": 620.0
+  },
+  "_synthetic_values_note": "kpi_targets, cost_model en product_density_kg_L zijn SYNTHETISCH en realistisch gekozen, nooit afgeleid van een echte klant of werkgever (harde anonimisatie-regel). Zij bepalen uitsluitend de norm-kleuring en de verliesbedragen in de demo; de metingen zelf komen uit de simulatie. Bij een echte implementatie worden deze in een kalibratie-workshop met de klant ingevuld."
 }

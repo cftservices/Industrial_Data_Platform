@@ -97,6 +97,23 @@ COOL_RATE_C_S = _envf("COOL_RATE_C_S", 1.5)          # cooling degrees C per pro
 FILL_RATE_PACKS_S = _envf("FILL_RATE_PACKS_S", 60.0)  # 1L packs filled per process-second
 AGITATOR_DEFAULT_RPM = 60.0
 
+# --- filler rejects ---------------------------------------------------------
+# Until now reject_count was initialised and reset but never incremented, so it
+# read 0 forever and every KPI that leans on scrap was uncomputable. Rejects are
+# modelled deterministically (no rng: a reproducible simulator is worth more
+# than a random one) as a function of end viscosity:
+#
+#   * a small baseline for seal and fill-weight faults, always present;
+#   * a penalty that grows as the product thins out below spec. Under-cooked vla
+#     is runny: it overfills, it does not seal cleanly, and the filler rejects it.
+#
+# So the Solve gets a second, measurable consequence. An under-cooked batch does
+# not just go to HOLD, it also throws away packs, and that shows up in the scrap
+# ratio and in the loss block in euros.
+REJECT_BASE_PCT = _envf("REJECT_BASE_PCT", 0.4)          # % of filled packs, normal running
+REJECT_OFFSPEC_PCT = _envf("REJECT_OFFSPEC_PCT", 6.0)    # extra % at full under-cook
+VISC_SPEC_MIN_cP = _envf("VISC_SPEC_MIN_cP", 150.0)      # matches factory-model verdict_rule
+
 AMBIENT_C = 20.0
 PACK_SIZE_L = 1.0
 
@@ -413,20 +430,37 @@ class VlaProcess:
             self.phase = "filling"
             self._log_event("phase_change", {"to": FILLING})
 
+    def _reject_rate(self) -> float:
+        """Fraction of filled packs the filler rejects, from end viscosity.
+
+        Deterministic by design. `shortfall` is 0.0 at or above the spec minimum
+        and 1.0 at raw, ungelatinised viscosity, so a fully under-cooked batch
+        gets the whole off-spec penalty and a good one only the baseline."""
+        span = max(1e-6, VISC_SPEC_MIN_cP - VISC_BASE_cP)
+        shortfall = clamp((VISC_SPEC_MIN_cP - self.viscosity_cP) / span, 0.0, 1.0)
+        return (REJECT_BASE_PCT + REJECT_OFFSPEC_PCT * shortfall) / 100.0
+
     def _tick_filling(self, pdt: float) -> None:
         self.phase = "filling"
-        packs_to_make = int(self.mix_level_L / self.pack_size_L)
-        if self.packs_total < packs_to_make:
+        # Every pack the volume yields gets filled; part of them is rejected.
+        # packs_total counts GOOD packs only, so good + rejects == filled and the
+        # mass balance stays honest for the yield KPI.
+        packs_to_fill = int(self.mix_level_L / self.pack_size_L)
+        if self._packs_f < packs_to_fill:
             # accumulate fractionally so the rate holds exactly at any TICK_INTERVAL
             self._packs_f += FILL_RATE_PACKS_S * pdt
-            self.packs_total = min(packs_to_make, int(self._packs_f))
-        if self.packs_total >= packs_to_make:
-            self.packs_total = packs_to_make
+        filled = min(packs_to_fill, int(self._packs_f))
+        self.reject_count = int(filled * self._reject_rate())
+        self.packs_total = filled - self.reject_count
+
+        if filled >= packs_to_fill:
             self.state = COMPLETE
             self.phase = "complete"
             self._log_event("batch_complete", {
                 "batch_id": self.batch_id,
                 "packs_total": self.packs_total,
+                "reject_count": self.reject_count,
+                "packs_filled": filled,
                 "peak_cook_temp_C": round(self.peak_cook_temp_C, 2),
                 "hold_elapsed_sec": round(self.hold_elapsed_sec, 1),
                 "end_viscosity_cP": round(self.viscosity_cP, 1),

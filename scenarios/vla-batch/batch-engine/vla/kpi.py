@@ -16,9 +16,12 @@ Ontwerpbesluiten die uit de onderzoeksronde van 2026-07-30 komen
 * **UNSET is nooit stilzwijgend OK.** Elke KPI die niet berekenbaar is levert
   status UNSET plus een `reason`, zodat het scherm een streepje met uitleg kan
   tonen in plaats van een verzonnen nul.
-* **`yield_pct` heet hier `plan_attainment_pct`.** De oude formule
-  (packs / planned_L) deelt stuks door liters en levert in de praktijk waarden
-  boven 100 %. Dat is plan-realisatie, geen yield. De naam volgt de meting.
+* **`yield_pct` is gesplitst in twee KPI's die echt iets anders meten.** De oude
+  formule (packs / planned_L) deelde stuks door liters en gaf in de praktijk
+  117 %. Dat is plan-realisatie en heet hier `plan_attainment_pct`. Yield is wat
+  een zuivelfabriek eronder verstaat: `mass_yield_pct`, kg product uit gedeeld
+  door kg grondstof in. Het verschil met 100 % is echt verlies (indamping,
+  fase-overgangen, leidingrestanten).
 * **Quality ratio is QR = GQ/PQ (ISO 22400-2), rework niet meegerekend**, niet
   de gunstiger quality buy rate QBR die rework als goed telt.
 * **Verliezen zijn causaal of resulterend.** Alleen causale verliezen tellen in
@@ -28,9 +31,11 @@ Ontwerpbesluiten die uit de onderzoeksronde van 2026-07-30 komen
 Bekende beperkingen van de huidige data, vastgesteld in
 docs/2026-07-30-grafana-kpi-bevindingen.md:
 
-* `reject_count` bestaat als veld op dw_production, maar de fabriekssimulatie
-  hoogt hem nooit op. `scrap_ratio` rekent correct en leest daardoor 0.0 zolang
-  de simulatie geen afkeur produceert. Dat is een gegeven, geen fout.
+* ~~`reject_count` wordt nooit opgehoogd~~ **opgelost 30-07**: de fabriek kent nu
+  een deterministisch afkeurmodel (`factory/physics.py::_reject_rate`), een
+  basispercentage plus een oplopende straf naarmate de viscositeit onder spec
+  zakt. `scrap_ratio` en de afkeurkosten werken daarmee echt, en de Solve krijgt
+  een tweede meetbaar gevolg.
 * Orders hebben een optionele `due_date`. Zonder due-date is OTIF niet
   berekenbaar en levert deze module UNSET, nooit 100 %.
 * Vensters worden in UTC afgekapt. Een lokale dienstgrens is een openstaand
@@ -321,6 +326,10 @@ def _utilization_efficiency(db, start, end) -> tuple[Optional[float], dict]:
     beide emmers, consistent met EquipmentMonitor."""
     rows = sorted(db.dw_equipment_state.find({}), key=lambda r: r.get("ts") or "")
     running = down = 0.0
+    # Nooit voorbij nu rekenen: een lopend venster is nog niet voorbij, en
+    # toekomstige tijd als stilstand tellen maakt elke KPI onbruikbaar zodra je
+    # midden in een week of maand kijkt.
+    horizon = min(end, datetime.now(timezone.utc))
     per_eq: dict[str, list[dict]] = {}
     for row in rows:
         per_eq.setdefault(row.get("equipment_id"), []).append(row)
@@ -332,11 +341,11 @@ def _utilization_efficiency(db, start, end) -> tuple[Optional[float], dict]:
             t0 = _parse(row.get("ts"))
             if t0 is None:
                 continue
-            t1 = _parse(hist[i + 1].get("ts")) if i + 1 < len(hist) else end
+            t1 = _parse(hist[i + 1].get("ts")) if i + 1 < len(hist) else horizon
             if t1 is None:
-                t1 = end
-            # knip het interval op de venstergrenzen
-            lo, hi = max(t0, start), min(t1, end)
+                t1 = horizon
+            # knip het interval op de venstergrenzen en op nu
+            lo, hi = max(t0, start), min(t1, horizon)
             dur = (hi - lo).total_seconds()
             if dur <= 0:
                 continue
@@ -378,6 +387,43 @@ def _plan_attainment(db, start, end) -> tuple[Optional[float], dict]:
     if value > 100.0:
         meta["note"] = ("boven 100 %: gepland volume is kleiner dan de "
                         "werkelijke opbrengst, controleer de noemer")
+    return value, meta
+
+
+def _mass_yield(db, start, end, density: Optional[float]) -> tuple[Optional[float], dict]:
+    """Yield op massabalans: kg product uit gedeeld door kg grondstof in.
+
+    Dit is wat een zuivelfabriek onder yield verstaat, en het is iets anders dan
+    plan-realisatie: de noemer is de werkelijke materiaalinzet en niet een
+    planningsgetal. Het verschil tussen 100 % en deze waarde is echt verlies
+    (indamping tijdens koken, fase-overgangen, restanten in leidingen), en dat
+    is precies de verliescategorie waar geen generieke OEE-tool voor bestaat.
+    """
+    if not density:
+        return None, {"reason": "geen product_density_kg_L in het model"}
+    batches = _completed_batches(db, start, end)
+    if not batches:
+        return None, {"reason": "geen afgeronde batches in dit venster"}
+    batch_ids = {b.get("batch_id") for b in batches}
+
+    kg_in = 0.0
+    for d in db.dw_doses.find({}):
+        if d.get("batch_id") in batch_ids and d.get("qty_actual") is not None:
+            kg_in += _num(d.get("qty_actual"))
+    if kg_in <= 0:
+        return None, {"reason": "geen gedoseerde hoeveelheden geboekt"}
+
+    kg_out = 0.0
+    for b in batches:
+        pack_L = _num(b.get("pack_size_L")) or 1.0
+        kg_out += _num(b.get("packs_total")) * pack_L * density
+
+    value = round(kg_out / kg_in * 100, 2)
+    meta = {"sample_n": len(batches), "kg_in": round(kg_in, 1),
+            "kg_out": round(kg_out, 1), "density_kg_L": density}
+    if value > 100.0:
+        meta["note"] = ("boven 100 %: er komt meer massa uit dan erin gaat, "
+                        "controleer de dichtheid of de doseerboekingen")
     return value, meta
 
 
@@ -478,6 +524,13 @@ KPI_DEFS = [
         "audience": "Management", "production_methodology": "Batch",
     },
     {
+        "kpi_id": "mass_yield_pct", "name": "Yield (massabalans)", "unit": "%",
+        "iso_ref": "ISO 22400-2 verwant (finished goods ratio)",
+        "direction": "higher_is_better",
+        "formula": "kg product uit / kg grondstof in", "timing": "periodic",
+        "audience": "Management", "production_methodology": "Batch",
+    },
+    {
         "kpi_id": "capability_cpk", "name": "Process capability", "unit": "",
         "iso_ref": "ISO 22400-2 Cpk", "direction": "higher_is_better",
         "formula": "min((mean - LSL), (USL - mean)) / 3 sigma",
@@ -494,7 +547,7 @@ KPI_DEFS = [
 ]
 
 
-def _measure(db, kpi_id: str, start, end, spec):
+def _measure(db, kpi_id: str, start, end, spec, density=None):
     if kpi_id == "throughput_rate":
         return _throughput_rate(db, start, end)
     if kpi_id == "quality_ratio":
@@ -505,6 +558,8 @@ def _measure(db, kpi_id: str, start, end, spec):
         return _utilization_efficiency(db, start, end)
     if kpi_id == "plan_attainment_pct":
         return _plan_attainment(db, start, end)
+    if kpi_id == "mass_yield_pct":
+        return _mass_yield(db, start, end, density)
     if kpi_id == "capability_cpk":
         return _capability_cpk(db, start, end, spec)
     if kpi_id == "otif_pct":
@@ -520,19 +575,21 @@ def compute_kpis(db, window: str = "week", compare: bool = True,
     model = load_factory_model() if model is None else model
     targets = load_kpi_targets(model)
     spec = viscosity_spec(model)
+    density = model.get("product_density_kg_L")
     start, end = window_bounds(window, now=now, offset=0)
     prev_start, prev_end = window_bounds(window, now=now, offset=1)
 
     out = []
     for spec_def in KPI_DEFS:
         kpi_id = spec_def["kpi_id"]
-        value, meta = _measure(db, kpi_id, start, end, spec)
+        value, meta = _measure(db, kpi_id, start, end, spec, density)
         target = targets.get(kpi_id)
         status = kpi_status(value, target)
 
         previous = None
         if compare:
-            previous, _ = _measure(db, kpi_id, prev_start, prev_end, spec)
+            previous, _ = _measure(db, kpi_id, prev_start, prev_end, spec,
+                                   density)
         delta = _delta(value, previous, spec_def["direction"])
 
         row = {
@@ -660,6 +717,11 @@ def compute_losses(db, start: datetime, end: datetime,
         omitted.append({"category": "rework",
                         "reason": "rework_cost_per_batch ontbreekt"})
 
+    # Een post die op 0,00 afrondt hoort niet in de lijst. Hij is technisch
+    # gemeten maar visueel niet te onderscheiden van "niet gekalibreerd", en dat
+    # is precies het onderscheid dat overeind moet blijven.
+    items = [i for i in items if i["amount"] > 0]
+
     causal = [i for i in items if i["causal_or_resultant"] == "causal"]
     total = round(sum(i["amount"] for i in causal), 2)
     for item in items:
@@ -688,6 +750,7 @@ def _loss_item(category: str, label: str, amount: float, currency: str,
 
 
 def _downtime_seconds(db, start: datetime, end: datetime) -> float:
+    horizon = min(end, datetime.now(timezone.utc))
     rows = sorted(db.dw_equipment_state.find({}), key=lambda r: r.get("ts") or "")
     per_eq: dict[str, list[dict]] = {}
     for row in rows:
@@ -702,8 +765,8 @@ def _downtime_seconds(db, start: datetime, end: datetime) -> float:
             t0 = _parse(row.get("ts"))
             if t0 is None:
                 continue
-            t1 = _parse(hist[i + 1].get("ts")) if i + 1 < len(hist) else end
-            lo, hi = max(t0, start), min(t1 or end, end)
+            t1 = _parse(hist[i + 1].get("ts")) if i + 1 < len(hist) else horizon
+            lo, hi = max(t0, start), min(t1 or horizon, horizon)
             total += max(0.0, (hi - lo).total_seconds())
     return total
 
