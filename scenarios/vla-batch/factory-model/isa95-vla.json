@@ -501,6 +501,20 @@
     "auto_action": "batch verdict HOLD/REJECTED + critical batch alarm + audit entry",
     "outcome": "Raw data (peak-temp x hold) leidt tot een echte beslissing: vasthouden/herkoken i.p.v. blind afvullen"
   },
+  "packs_per_pallet": 1200,
+  "stale_threshold_s": 90,
+  "fill_limits_ml": {
+    "nominal": 1000,
+    "T1": 985,
+    "T2": 970,
+    "note": "Richtlijn 76/211/EEG Annex I punt 1 met de TNE-tabel uit punt 2.4: voor 1000 ml is TNE 15 ml (T1) en 2 x TNE 30 ml (T2). De vaak genoemde 2,5 procent staat NIET in de richtlijn en volgt uit de steekproefplannen van Annex II; label die in de UI als praktijknorm, niet als wettelijke eis."
+  },
+  "phase_nominal_sec": {
+    "DOSING": 30,
+    "COOKING": 60,
+    "COOLING": 30,
+    "FILLING": 30
+  },
   "product_density_kg_L": 1.03,
   "kpi_targets": [
     { "kpi_id": "throughput_rate",         "scope": "line", "direction": "higher_is_better",
@@ -517,6 +531,9 @@
       "target": 90.0, "warn": 87.0, "critical": 83.0, "unit": "%" },
     { "kpi_id": "capability_cpk",          "scope": "line", "direction": "higher_is_better",
       "target": 1.33, "warn": 1.00, "critical": 0.80, "unit": "" },
+    { "kpi_id": "oee",                     "scope": "equipment", "scope_ref": "*",
+      "direction": "higher_is_better",
+      "target": 0.80, "warn": 0.70, "critical": 0.60, "unit": "ratio" },
     { "kpi_id": "otif_pct",                "scope": "line", "direction": "higher_is_better",
       "target": 95.0, "warn": 90.0, "critical": 80.0, "unit": "%" }
   ],

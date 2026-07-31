@@ -52,6 +52,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from . import model as M
+from .alarms import alarm_load
 from .equipment import EQUIPMENT_IDS, EquipmentMonitor
 
 log = logging.getLogger("vla.kpi")
@@ -790,5 +791,8 @@ def summary(db, window: str = "week", compare: bool = True,
         "compare": compare,
         "kpis": kpis,
         "losses": losses,
+        # De alarmbelasting hoort bij de KPI-set: het is een maat tegen een
+        # norm, en hij staat als live getal op L1.
+        "alarm_load": alarm_load(db, start, end),
         "generated_at": _iso(datetime.now(timezone.utc)),
     }
