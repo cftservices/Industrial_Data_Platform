@@ -3,7 +3,7 @@
 import { useQuery, type UseQueryOptions } from "@tanstack/react-query";
 import { get, getUi } from "./client";
 import type { Refusal } from "./refusal";
-import type { KpiSummary, UiModel } from "./types";
+import type { Alarm, KpiSummary, LineLive, TagReading, UiModel } from "./types";
 
 /**
  * Query-keys en poll-intervallen op een plek.
@@ -103,4 +103,25 @@ export function useUiModel(extra?: Extra<UiModel>) {
     retry: 1,
     ...extra,
   });
+}
+
+/* ------------------------------------------------------------ operatorkant */
+
+export function useLineLive(extra?: Extra<LineLive>) {
+  return usePolled<LineLive>(keys.line, "/line/live", POLL.live, extra);
+}
+
+export function useAlarms(filter = "", extra?: Extra<Alarm[]>) {
+  const qs = filter ? `?priority=${encodeURIComponent(filter)}` : "";
+  return usePolled<Alarm[]>(keys.alarms(filter || "alle"), `/alarms${qs}`, POLL.lists, extra);
+}
+
+/** Verbose tags: met ts, quality en leeftijd, zodat stale herkenbaar is. */
+export function useTagsVerbose(extra?: Extra<Record<string, TagReading>>) {
+  return usePolled<Record<string, TagReading>>(
+    ["tags", "verbose"],
+    "/tags?verbose=1",
+    POLL.live,
+    extra,
+  );
 }

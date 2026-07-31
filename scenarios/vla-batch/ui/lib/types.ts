@@ -98,3 +98,91 @@ export type UiModel = {
   fill_limits_ml?: { T1: number; T2: number } | null;
   stale_threshold_s?: number | null;
 };
+
+/* ------------------------------------------------------------ operatorkant */
+
+export type Alarm = {
+  alarm_id: string;
+  message: string;
+  equipment_id: string | null;
+  alarm_type: string | null;
+  batch_id: string | null;
+  severity: string;
+  ts: string;
+  acknowledged: boolean;
+  priority: "high" | "medium" | "low";
+  state: "open" | "acknowledged" | "shelved";
+  shelved_reason?: string | null;
+  shelved_until?: string | null;
+};
+
+export type AlarmLoad = {
+  available: boolean;
+  reason?: string;
+  total?: number;
+  per_hour?: number;
+  per_10min?: number;
+  per_day?: number;
+  counts?: { high: number; medium: number; low: number };
+  mix_pct?: { high: number | null; medium: number | null; low: number | null };
+  mix_targets_pct?: { high: number; medium: number; low: number };
+  targets?: {
+    per_10min: { acceptable: number; max: number };
+    per_hour: { acceptable: number; max: number };
+    per_day: { acceptable: number; max: number };
+  };
+  flood_time_share?: number;
+  flood_target?: number;
+  stale_over_24h?: number;
+  stale_target_per_day?: number;
+  top_sources?: Array<{ source: string; count: number; share_pct: number | null }>;
+};
+
+export type TagReading = {
+  value: number | string | null;
+  ts: string | null;
+  unit: string | null;
+  quality: string;
+  retained: boolean;
+  age_s: number | null;
+};
+
+export type LineLive = {
+  available: boolean;
+  reason?: string;
+  batch?: {
+    batch_id: string;
+    state: string;
+    verdict: string | null;
+    recipe_id: string;
+    started_at: string | null;
+    completed_at: string | null;
+    phase_started_at: string | null;
+    phase_nominal_sec: number | null;
+  };
+  doses?: Array<{
+    material_id: string;
+    qty_target: number;
+    qty_actual: number | null;
+    uom: string;
+    tol_min: number | null;
+    tol_max: number | null;
+    in_tolerance: boolean | null;
+  }>;
+  dose_totals?: { target_kg: number; actual_kg: number; pct: number | null };
+  filling?: {
+    packs_total: number;
+    packs_target: number | null;
+    packs_progress_pct: number | null;
+    packs_rate_per_min: number;
+    rate_window_s: number;
+    pallets: number | null;
+    fill_limits_ml: { nominal: number; T1: number; T2: number } | null;
+  };
+  quality?: {
+    end_viscosity_cP: number | null;
+    peak_cook_temp_C: number | null;
+    hold_elapsed_sec: number | null;
+    spec_cP: { min: number; max: number } | null;
+  };
+};
