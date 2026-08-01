@@ -368,14 +368,27 @@ class EquipmentMonitor:
 
     def health(self) -> list[dict]:
         """PR-32: snapshot() extended per equipment with the cook heat-up
-        trend (raw heatup_history) and the equipment's own open CBM alerts."""
+        trend (raw heatup_history) and the equipment's own open CBM alerts.
+
+        Also carries the CBM baseline and threshold. Those used to be derived
+        in the dashboard as `min(trend) * 1.35`, under a comment claiming they
+        came from engine configuration — they did not, the 1.35 lived in the
+        React component. A threshold invented in the UI is exactly the
+        divergence this project forbids for KPIs, so it is computed here, from
+        CBM_ALERT_FACTOR, the same constant open_alerts() fires on."""
         out = []
         for row in self.snapshot():
             eq = row["equipment_id"]
             meta = self.ensure_meta(eq)
+            trend = list(meta.get("heatup_history") or [])
+            secs = [h["heatup_sec"] for h in trend if h.get("heatup_sec") is not None]
+            baseline = min(secs) if secs else None
             out.append({
                 **row,
-                "heatup_trend": list(meta.get("heatup_history") or []),
+                "heatup_trend": trend,
+                "heatup_baseline_sec": round(baseline, 1) if baseline else None,
+                "heatup_threshold_sec": (round(baseline * CBM_ALERT_FACTOR, 1)
+                                         if baseline else None),
                 "open_cbm_alerts": self.open_alerts(eq),
             })
         return out

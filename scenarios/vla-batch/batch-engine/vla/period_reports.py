@@ -19,6 +19,7 @@ import io
 import logging
 from datetime import datetime, timedelta, timezone
 
+from . import model as M
 from .equipment import EQUIPMENT_IDS, EquipmentMonitor
 
 log = logging.getLogger("vla.period_reports")
@@ -26,7 +27,11 @@ log = logging.getLogger("vla.period_reports")
 SITE = "DairyWorks"
 LINE = "Vla"
 
-_DOWNTIME_STATES = {"Down", "Error", "Dirty"}
+# DERDE kopie van de state-indeling, gevonden bij de audit van 02-08. Deze
+# telde Dirty nog als stilstand terwijl kpi.py en equipment.py dat op 01-08
+# allebei niet meer deden, dus het PDF rapporteerde meer stilstandsgebeurtenissen
+# dan het scherm. Nu leest ook dit bestand uit model.py.
+_DOWNTIME_STATES = M.DOWNTIME_STATES
 
 
 def _iso() -> str:
@@ -37,24 +42,55 @@ def _parse(ts) -> datetime:
     return datetime.fromisoformat(ts)
 
 
-def _in_window(ts, cutoff: datetime) -> bool:
+def _in_window(ts, cutoff: datetime, end: datetime | None = None) -> bool:
+    """Halfopen interval [cutoff, end). Zonder `end` alles vanaf cutoff.
+
+    Het bovenste einde is nodig sinds het rapport ook een kalendervenster kan
+    krijgen: bij `window=month` op de eerste van de maand loopt het venster tot
+    de volgende maand, en zonder bovengrens telde alles daarna gewoon mee.
+    """
     if not ts:
         return False
     try:
-        return _parse(ts) >= cutoff
+        t = _parse(ts)
     except (TypeError, ValueError):
         return False
+    if t < cutoff:
+        return False
+    return end is None or t < end
 
 
 # --------------------------------------------------------------- assemblers
 
-def assemble_period_report(db, days: int) -> dict:
-    """Plant-wide management report over batches completed in the last
-    `days` days (window keyed on dw_batches.completed_at)."""
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+def assemble_period_report(db, days: int | None = None,
+                           window: str | None = None) -> dict:
+    """Plant-wide management report over batches completed in a window.
+
+    Two ways to say which window, and `window` wins:
+
+      * `window="shift"|"day"|"week"|"month"` — dezelfde vensterlogica als
+        `GET /kpi/summary`, via `kpi.window_bounds`. Dit is de manier waarop
+        het managementscherm het rapport opvraagt.
+      * `days=N` — het oude rollende venster. Blijft bestaan voor het
+        report centre, waar de gebruiker zelf een aantal dagen invult.
+
+    Waarom dit erbij moest (audit 02-08): het managementscherm liet je kiezen
+    tussen dienst, dag, week en maand, en de PDF-knop stuurde onvoorwaardelijk
+    `days=7` mee, pal onder de tekst dat het rapport exact dezelfde parameters
+    krijgt. Kies "Maand" en je kreeg een week. Een dienst is sowieso niet in
+    dagen uit te drukken en `days=7` vanaf nu is niet week 30.
+    """
+    now = datetime.now(timezone.utc)
+    if window:
+        from .kpi import window_bounds  # lokaal: geen cyclus
+
+        cutoff, end = window_bounds(window, now)
+    else:
+        days = 7 if days is None else days
+        cutoff, end = now - timedelta(days=days), now
 
     batches = [b for b in db.dw_batches.find({})
-               if _in_window(b.get("completed_at"), cutoff)]
+               if _in_window(b.get("completed_at"), cutoff, end)]
     batches_by_verdict = {"APPROVED": 0, "HOLD": 0, "REJECTED": 0, "PENDING": 0}
     packs_sum = 0.0
     planned_sum = 0.0
@@ -74,21 +110,25 @@ def assemble_period_report(db, days: int) -> dict:
     state_rows = sorted(db.dw_equipment_state.find({}), key=lambda r: r["ts"])
     downtime_events = sum(
         1 for r in state_rows
-        if r.get("state") in _DOWNTIME_STATES and _in_window(r.get("ts"), cutoff)
+        if r.get("state") in _DOWNTIME_STATES and _in_window(r.get("ts"), cutoff, end)
     )
     cbm_alerts = [a for a in db.dw_cbm_alerts.find({})
-                  if _in_window(a.get("ts"), cutoff)]
+                  if _in_window(a.get("ts"), cutoff, end)]
 
     # PR-38: het verliesblok komt uit kpi.compute_losses, niet uit een eigen
     # rekensom hier. Scherm en PDF moeten gegarandeerd hetzelfde bedrag en
     # dezelfde rangschikking tonen, en dat kan alleen met een gedeelde bron.
     from .kpi import compute_losses, load_cost_model  # lokaal: geen cyclus
-    losses = compute_losses(db, cutoff, datetime.now(timezone.utc),
-                            load_cost_model())
+    losses = compute_losses(db, cutoff, end, load_cost_model())
 
     return {
         "report_type": "Management Report",
+        # Het venster staat er nu VOLUIT in, zodat het PDF kan zeggen welke
+        # periode het beslaat in plaats van alleen een aantal dagen.
+        "window": window,
         "window_days": days,
+        "from": cutoff.isoformat(),
+        "to": end.isoformat(),
         "batches_total": total,
         "batches_by_verdict": batches_by_verdict,
         "yield_pct": yield_pct,

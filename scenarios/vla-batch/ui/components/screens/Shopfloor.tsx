@@ -254,7 +254,7 @@ export function Shopfloor() {
           <CrossLink href={`/orders${result?.order_id ? `?order=${result.order_id}` : ""}`}>
             Maak er eerst een aan op het orderscherm
           </CrossLink>
-          , of gebruik de SCADA-console.
+          , of via <CrossLink href="/scada">de SCADA-console</CrossLink>.
         </p>
       )}
 

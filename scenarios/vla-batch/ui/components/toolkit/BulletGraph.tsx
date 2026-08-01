@@ -13,7 +13,10 @@
  *   - de norm is een comparative marker, geen kleurvlak.
  *
  * De bullet graph is ontworpen als VERVANGER van meters en gauges. Daarom staat
- * er nergens in dit project nog een gauge, ook niet op de sales-landing.
+ * er op geen enkel beslissingsscherm een gauge, ook niet op de sales-landing.
+ * De enige uitzondering is het procesbeeld op /scada: naast een afbeelding van
+ * de installatie draagt een naald een ruimtelijke positie die je vanuit je
+ * ooghoek oppikt. Zie de afweging in Gauge.tsx.
  */
 
 type Props = {

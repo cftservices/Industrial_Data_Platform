@@ -620,14 +620,27 @@ def get_kpi_summary(window: str = Query(default="week"),
 
 
 @app.get(f"{API}/report/period")
-def get_period_report(days: int = Query(default=7), format: str = Query(default="json")):
-    """PR-22: plant-wide management report over the last `days` days.
+def get_period_report(days: int = Query(default=7),
+                      window: str | None = Query(default=None),
+                      format: str = Query(default="json")):
+    """PR-22: plant-wide management report.
+
+    Two ways to pick the period, and `window` wins: `window=shift|day|week|month`
+    uses exactly the same bounds as GET /kpi/summary, `days=N` is the older
+    rolling window that the report centre still offers.
+
+    The window parameter exists because the management screen let you pick a
+    period and then asked for `days=7` regardless — see assemble_period_report.
+
     NOTE: this literal route MUST stay ahead of GET /report/{batch_id}
     below, otherwise FastAPI matches "period" as a batch_id path param."""
     db = STATE.get("db")
     if db is None:
         raise HTTPException(503, "engine not initialized")
-    rep = assemble_period_report(db, days)
+    try:
+        rep = assemble_period_report(db, days=days, window=window)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     if format == "pdf":
         pdf = render_period_pdf(rep)
         media = "application/pdf" if pdf[:4] == b"%PDF" else "text/plain"

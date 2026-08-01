@@ -333,7 +333,7 @@ export function Scada() {
         </div>
         <p className="text-[0.8125rem] text-ink-muted">
           Te laag koken geeft te lage viscositeit, buiten spec, en dus HOLD plus meetbare afkeur.
-          Dat is de Solve, live te tonen.
+          Gebruik dit om te oefenen met een afwijking voordat hij zich echt voordoet.
         </p>
       </section>
     </main>

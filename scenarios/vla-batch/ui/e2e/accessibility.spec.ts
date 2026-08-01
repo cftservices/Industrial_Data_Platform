@@ -60,7 +60,15 @@ async function settle(page: Page) {
  * veranderde. Een test die om de haverklap flapt, wordt genegeerd, en dan
  * bewaakt hij niets meer.
  */
-const MASK = (page: Page) => [page.locator("[data-volatile]")];
+const MASK = (page: Page) => [
+  page.locator("[data-volatile]"),
+  // Elke waarde in dit systeem draagt `.num`. Die maskeren haalt precies de
+  // ruis weg waardoor deze snapshots bij herhaling rood gaven: de KPI's en
+  // procesmetingen veranderen tussen twee runs, het ONTWERP niet. Vorm, kleur,
+  // stand en label worden nog steeds vergeleken, en dat is wat criterium 5 en 6
+  // van de stijlgids eisen: draagt de vorm het onderscheid als de kleur wegvalt.
+  page.locator(".num"),
+];
 
 test.describe("grijswaarden", () => {
   for (const s of SCREENS) {
@@ -98,8 +106,10 @@ test.describe("kleurenblindheid", () => {
 });
 
 test.describe("statustaal", () => {
-  test("elke status draagt naast kleur ook een vorm en een woord", async ({ page }) => {
-    await page.goto("/management");
+  // Draait op de twee schermen die uit de pixelvergelijking zijn gehaald.
+  for (const pad of ["/management", "/line"]) {
+  test(`elke status draagt naast kleur ook een vorm en een woord (${pad})`, async ({ page }) => {
+    await page.goto(pad);
     await settle(page);
 
     // Elke pill heeft een glyph (svg of span met vorm) EN tekst. Kleur alleen
@@ -113,6 +123,7 @@ test.describe("statustaal", () => {
       .count();
     expect(statusTexts, "geen enkele status draagt een woord").toBeGreaterThan(0);
   });
+  }
 
   test("de alarmstrook is geen modal", async ({ page }) => {
     await page.goto("/line");

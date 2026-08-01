@@ -251,6 +251,11 @@ export function PlantOverview() {
             <span className="eyebrow">Procesdelen</span>
             <h2 className="text-base font-semibold">Equipment</h2>
           </div>
+          {(equipment.data ?? []).length === 0 && (
+            <p className="text-[0.8125rem] text-ink-muted">
+              Nog geen procesdelen bekend. Draait de engine?
+            </p>
+          )}
           <ul className="m-0 flex list-none flex-col gap-1 p-0">
             {(equipment.data ?? []).map((e) => (
               <li key={e.equipment_id} className="flex items-center justify-between gap-3">

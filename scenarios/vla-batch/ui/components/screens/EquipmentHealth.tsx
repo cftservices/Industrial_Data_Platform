@@ -33,6 +33,9 @@ type Health = {
   batches_since_cip?: number;
   dirty?: boolean;
   heatup_trend?: Array<{ heatup_sec: number }>;
+  /** Basislijn en CBM-drempel, berekend in de engine. Niet hier. */
+  heatup_baseline_sec?: number | null;
+  heatup_threshold_sec?: number | null;
   open_cbm_alerts?: Array<{ message: string; alert_type: string }>;
 };
 
@@ -131,13 +134,25 @@ export function EquipmentHealth() {
             </tr>
           </thead>
           <tbody>
+            {(health.data ?? []).length === 0 && (
+              <tr>
+                <td colSpan={8} className="px-3 py-4 text-ink-muted">
+                  Geen procesdelen bekend. Draait de engine, en is er al een batch geweest?
+                </td>
+              </tr>
+            )}
             {(health.data ?? []).map((e) => {
               const o = byId.get(e.equipment_id);
               const trend = (e.heatup_trend ?? []).map((h) => h.heatup_sec);
-              // Basislijn en drempel komen uit de engine-configuratie, niet uit
-              // een getal in dit bestand.
-              const base = trend.length ? Math.min(...trend) : null;
-              const threshold = base !== null ? base * 1.35 : null;
+              // Basislijn en drempel komen uit de ENGINE. Tot de audit van
+              // 02-08 stond hier `base * 1.35` met een commentaar dat beweerde
+              // dat het uit de configuratie kwam. Dat was onwaar: de UI
+              // verzon de drempel zelf, en dat is precies de regel die dit
+              // project overal oplegt (een KPI wordt op een plek berekend).
+              // Ontbreekt de drempel, dan tonen we hem niet in plaats van er
+              // een te bedenken.
+              const base = e.heatup_baseline_sec ?? null;
+              const threshold = e.heatup_threshold_sec ?? null;
               const last = trend.length ? trend[trend.length - 1] : null;
               const under = oeeTarget !== null && o ? o.oee < oeeTarget : false;
 

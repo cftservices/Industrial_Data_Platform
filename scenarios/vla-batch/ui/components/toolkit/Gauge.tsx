@@ -55,7 +55,8 @@ export function Gauge({
   value: number | null;
   unit: string;
   min: number;
-  max: number;
+  /** null = geen te verantwoorden bovengrens; dan tekent de meter zichzelf niet. */
+  max: number | null;
   /** Tweezijdige specificatie; wordt als band op de schaal getekend. */
   spec?: { min: number; max: number } | null;
   /** Ingestelde waarde, als losse streep. Nooit hetzelfde als de meting. */
@@ -64,6 +65,24 @@ export function Gauge({
   stale?: boolean;
   size?: number;
 }) {
+  // Geen verantwoorde bovengrens betekent geen meter. Dezelfde regel als in
+  // DeviationBand: een verzonnen schaal is erger dan geen schaal. Hiervoor viel
+  // deze component terug op basis_L ?? 5000 en spec.max * 1.25 ?? 400, en dan
+  // stond er een naald op een bereik dat nergens vandaan kwam.
+  if (max === null) {
+    return (
+      <figure className="m-0 flex flex-col items-center gap-0.5" style={{ width: size }}>
+        <div
+          className="flex items-center justify-center border border-dashed border-line-strong text-center text-[0.625rem] text-ink-faint"
+          style={{ width: size, height: size * 0.82 }}
+        >
+          geen schaal bekend
+        </div>
+        <figcaption className="text-[0.6875rem] font-semibold">{label}</figcaption>
+      </figure>
+    );
+  }
+
   const cx = 60;
   const cy = 58;
   const r = 42;

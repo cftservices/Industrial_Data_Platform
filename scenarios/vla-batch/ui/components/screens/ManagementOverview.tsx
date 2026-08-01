@@ -160,13 +160,18 @@ export function ManagementOverview() {
                 hetzelfde getal tonen.
               </p>
               <div className="flex flex-wrap items-center gap-3">
+                {/* Het GEKOZEN venster gaat mee, niet een vast aantal dagen.
+                    Hiervoor stond hier onvoorwaardelijk days=7 pal onder de
+                    tekst dat het rapport dezelfde parameters krijgt: koos je
+                    "Maand", dan kreeg je een week. */}
                 <a
-                  href={`/api/v1/report/period?days=7&format=pdf`}
+                  href={`/api/v1/report/period?window=${encodeURIComponent(window)}&format=pdf`}
                   target="_blank"
                   rel="noreferrer"
                   className="rounded-[var(--radius-tile)] border border-line-strong px-3 py-1.5 text-[0.8125rem] font-semibold hover:border-ink-muted"
                 >
-                  Periode-rapport (PDF)
+                  Rapport over {WINDOWS.find((w) => w.id === window)?.label.toLowerCase() ?? window}{" "}
+                  (PDF)
                 </a>
                 <CrossLink href="/reports">andere rapporten</CrossLink>
                 <CrossLink href="/analyse">zelf analyseren</CrossLink>

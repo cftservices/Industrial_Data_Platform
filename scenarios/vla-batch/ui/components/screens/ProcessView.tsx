@@ -161,7 +161,9 @@ export function ProcessView() {
               min={0}
               // Schaal rond de specband, niet rond de meting: anders verspringt
               // de hele meter zodra de waarde beweegt.
-              max={spec ? Math.round(spec.max * 1.25) : 400}
+              // Zonder specband is er geen te verantwoorden bovengrens voor
+              // viscositeit; dan toont de meter dat, in plaats van 400 te verzinnen.
+              max={spec ? Math.round(spec.max * 1.25) : null}
               spec={spec}
               tone={koken?.tone ?? "neutral"}
               stale={koken?.stale ?? false}
@@ -171,7 +173,10 @@ export function ProcessView() {
               value={koken ? sec(koken, "Temperatuur") : null}
               unit="°C"
               min={0}
-              max={110}
+              // Afgeleid van het kook-setpoint uit het recept, net als de
+              // schaal die de BFF aan de koelstap meegeeft. Hiervoor stond hier
+              // 110 zonder herkomst.
+              max={cookSetpoint ? Math.ceil(cookSetpoint * 1.15) : null}
               setpoint={cookSetpoint}
               stale={koken?.stale ?? false}
             />
@@ -180,7 +185,7 @@ export function ProcessView() {
               value={koelen?.primary.value ?? null}
               unit="°C"
               min={0}
-              max={110}
+              max={cookSetpoint ? Math.ceil(cookSetpoint * 1.15) : null}
               setpoint={coolTarget}
               stale={koelen?.stale ?? false}
             />
@@ -189,6 +194,9 @@ export function ProcessView() {
               value={mengen ? sec(mengen, "Roerder") : null}
               unit="tpm"
               min={0}
+              // Instrumentbereik van de toerenteller, geen procesnorm. Het
+              // staat als getal op de schaal, dus de lezer ziet waar hij aan
+              // toe is; dat is iets anders dan een stille terugval.
               max={120}
               stale={mengen?.stale ?? false}
             />
@@ -197,7 +205,7 @@ export function ProcessView() {
               value={mengen?.primary.value ?? null}
               unit="L"
               min={0}
-              max={basisL ?? 5000}
+              max={basisL}
               stale={mengen?.stale ?? false}
             />
             <Gauge

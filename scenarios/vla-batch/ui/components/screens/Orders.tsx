@@ -299,12 +299,15 @@ export function Orders() {
               <span className="eyebrow">Orderdetail</span>
               <h2 className="mono text-base font-semibold">{detail.order_id}</h2>
             </div>
+            {/* NIET "Sluiten": die knop staat in dezelfde tabel al voor het
+                sluiten van een ORDER, en dat is onomkeerbaar. Twee knoppen met
+                hetzelfde woord waarvan er een destructief is, is een valstrik. */}
             <button
               type="button"
               onClick={() => open(null)}
               className="text-[0.8125rem] text-ink-muted hover:text-ink"
             >
-              Sluiten
+              Detail dichtklappen
             </button>
           </div>
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[0.8125rem]">

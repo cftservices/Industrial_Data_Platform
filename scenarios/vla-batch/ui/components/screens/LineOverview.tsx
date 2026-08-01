@@ -442,9 +442,8 @@ export function LineOverview() {
                 <p className="text-[0.8125rem] text-ink-muted">Nog geen productie geboekt.</p>
               )}
               <p className="text-[0.6875rem] text-ink-faint">
-                Snelheid, voortgang en pallets komen kant-en-klaar uit de engine. De oude client
-                leidde die zelf af uit twee opeenvolgende metingen, en dat ging bij elke re-render
-                fout.
+                Snelheid, voortgang en pallets komen kant-en-klaar uit de engine, zodat het scherm
+                en het batchrapport hetzelfde getal tonen.
               </p>
             </section>
           </div>
