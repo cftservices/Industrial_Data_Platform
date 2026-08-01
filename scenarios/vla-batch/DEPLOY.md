@@ -135,3 +135,64 @@ bezet (legacy mosquitto), gebruik dan de extra overlay
 | Dashboard | `https://milkdemo.<domain>` (basic-auth) |
 | Grafana | `https://grafana.<domain>` |
 | batch-engine / factory / TDengine / MonsterMQ | intern op `idp-network` (niet publiek) |
+
+---
+
+## Cutover naar de Next.js-UI (`vla-ui`)
+
+De nieuwe UI draait bewust **naast** de oude SPA, zodat de demo blijft werken.
+Drie gescheiden stappen, elk apart verifieerbaar.
+
+### Stap 1: de middleware-verhuizing (doe dit eerst en apart)
+
+`milkdemo-auth` werd gedefinieerd op `vla-dashboard`, de service die straks
+verdwijnt, terwijl Grafana ernaar verwijst. Traefik leest labels alleen van
+containers met `traefik.enable=true`, dus **verdwijnt die service, dan valt
+Grafana om.** De definitie staat nu bij `grafana`, die elke dashboardwissel
+overleeft.
+
+In dezelfde wijziging kwam de same-origin embed-route erbij
+(`Host(milkdemo) && PathPrefix(/grafana)`), plus `serve_from_sub_path` en
+`allow_embedding`. `GF_AUTH_ANONYMOUS_ENABLED` blijft **uit**: een anonieme
+bezoeker is Viewer, en een Viewer mag via de HTTP-API willekeurige queries naar
+elke datasource sturen. Dat zou de complete historian publiek queryable maken.
+
+```bash
+docker compose -f docker-compose.slim.yml \
+               -f scenarios/vla-batch/docker-compose.vla.yml up -d grafana vla-dashboard
+
+# Verifieer VOORDAT je verder gaat:
+curl -sk -o /dev/null -w '%{http_code}\n' https://grafana.${DOMAIN}/api/health          # 401
+curl -sku "$USER:$PASS" -o /dev/null -w '%{http_code}\n' https://grafana.${DOMAIN}/api/health   # 200
+curl -sku "$USER:$PASS" -o /dev/null -w '%{http_code}\n' https://milkdemo.${DOMAIN}/grafana/api/health  # 200
+```
+
+Combineer `serve_from_sub_path` niet met een prefix-strip in de proxy: die twee
+doen hetzelfde werk dubbel en geven redirect-loops of 404's op statische assets.
+Test daarna zowel een `d-solo`-iframe als `/grafana/api/live/`.
+
+### Stap 2: `vla-ui` ernaast
+
+```bash
+docker compose -f docker-compose.slim.yml \
+               -f scenarios/vla-batch/docker-compose.vla.yml up -d --build vla-ui
+
+curl -sku "$USER:$PASS" https://milkdemo-next.${DOMAIN}/api/ui/model | head -c 200
+```
+
+De `/api`-proxy die nginx deed zit nu in `app/api/v1/[...path]/route.ts`,
+inclusief de 60 s timeout die de PDF-renders nodig hebben en het ongewijzigd
+doorgeven van de gestructureerde weigeringen. De oude SPA blijft draaien op
+`milkdemo.${DOMAIN}`.
+
+Loop de elf routes na: `/`, `/?view=sales`, `/management`, `/line`, `/alarms`,
+`/batches`, `/equipment`, `/reports`, `/analyse`, `/scada`, `/shopfloor`.
+
+### Stap 3: omschakelen
+
+Laat de `milkdemo`-router naar `vla-ui` wijzen en schrap `vla-dashboard`.
+Rollback is een `git revert` plus `docker compose up -d`.
+
+**Voor de omschakeling nog even nalopen:** draait er een curl-loop op Grafana
+tijdens de hele operatie zonder een enkele non-2xx, en is `NEXT_PUBLIC_GRAFANA_PATH`
+gezet op een dashboard dat bestaat (`/grafana/d/vla-line?kiosk`).

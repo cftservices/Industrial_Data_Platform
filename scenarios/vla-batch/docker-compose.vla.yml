@@ -291,9 +291,46 @@ services:
       - "traefik.http.routers.milkdemo.rule=Host(`milkdemo.${DOMAIN}`)"
       - "traefik.http.routers.milkdemo.entrypoints=websecure"
       - "traefik.http.routers.milkdemo.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.milkdemo.middlewares=milkdemo-auth"
-      - "traefik.http.middlewares.milkdemo-auth.basicauth.users=${DASHBOARD_AUTH}"
+      - "traefik.http.routers.milkdemo.middlewares=milkdemo-auth@docker"
+      # ⚠ De DEFINITIE van milkdemo-auth staat sinds 01-08 bij grafana, niet
+      # hier. Traefik leest labels alleen van containers met traefik.enable=true,
+      # dus stond de definitie op deze service, dan viel grafana om zodra
+      # vla-dashboard verdween. Grafana overleeft elke dashboardwissel.
       - "traefik.http.services.milkdemo.loadbalancer.server.port=80"
+
+  # ── VLA UI (Next.js 15) — vervangt vla-dashboard na de cutover ────────────
+  # Draait BEWUST naast de oude SPA op een tweede hostname, zodat de demo blijft
+  # werken tijdens de bouw. Omschakelen is straks een regelwijziging: de
+  # milkdemo-router naar deze service laten wijzen en vla-dashboard schrappen.
+  # Rollback is dan een git revert plus `docker compose up -d`.
+  vla-ui:
+    build:
+      context: ./scenarios/vla-batch/ui
+    container_name: vla-ui
+    restart: unless-stopped
+    mem_limit: 256m
+    environment:
+      # De BFF praat intern met de engine; die is niet extern bereikbaar en
+      # draagt geen eigen auth. Deze proxy is de enige weg naartoe, achter
+      # dezelfde Traefik-basicauth als de rest.
+      ENGINE_URL: http://vla-batch-engine:8000
+      FACTORY_MODEL: /model/isa95-vla.json
+      NEXT_PUBLIC_GRAFANA_PATH: /grafana/d/vla-line?kiosk
+    volumes:
+      # Dezelfde read-only mount als de engine: de UI serveert een whitelisted
+      # projectie (drempels, specbanden), nooit het hele model.
+      - ./scenarios/vla-batch/factory-model:/model:ro
+    depends_on:
+      - vla-batch-engine
+    networks:
+      - idp-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.vlaui.rule=Host(`milkdemo-next.${DOMAIN}`)"
+      - "traefik.http.routers.vlaui.entrypoints=websecure"
+      - "traefik.http.routers.vlaui.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.vlaui.middlewares=milkdemo-auth@docker"
+      - "traefik.http.services.vlaui.loadbalancer.server.port=3000"
 
   # ── GRAFANA (uit slim-base) — mount de vla-provisioning ───────────────────
   # De grafana-service is al gedefinieerd in docker-compose.slim.yml (web-facing
@@ -321,6 +358,21 @@ services:
       # "No data" terwijl de health-check groen blijft. Zet hem in .env:
       #   TD_BASIC_AUTH=$(printf 'root:%s' "$TD_PASS" | base64 -w0)
       TD_BASIC_AUTH: ${TD_BASIC_AUTH:-cm9vdDp0YW9zZGF0YQ==}
+      # ── same-origin embedding (scherm 5) ────────────────────────────────
+      # Zonder allow_embedding stuurt Grafana X-Frame-Options: deny en blijft
+      # elk iframe leeg met een console-fout. Onder een subpad van dezelfde
+      # host is het iframe same-origin, dus de basicauth reist mee en er is
+      # geen third-party-cookie nodig.
+      #
+      # Combineer serve_from_sub_path NIET met een prefix-strip in de proxy:
+      # die twee doen hetzelfde werk dubbel en geven redirect-loops of 404's op
+      # statische assets. Traefik geeft /grafana hier intact door.
+      GF_SERVER_ROOT_URL: https://milkdemo.${DOMAIN}/grafana/
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_SECURITY_ALLOW_EMBEDDING: "true"
+      # Blijft expliciet uit; zie de waarschuwing bij de labels.
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
     # ── auth ──────────────────────────────────────────────────────────────
     # De slim-base zet vier Traefik-labels voor grafana.${DOMAIN} ZONDER
     # middleware, terwijl vla-dashboard wel achter milkdemo-auth zit. Grafana's
@@ -337,10 +389,31 @@ services:
     # losse grafana-router weg). Eén credential, same-origin.
     labels:
       - "traefik.enable=true"
+      # ── DEFINITIE van de middleware staat vanaf 01-08 HIER ────────────────
+      # Grafana overleeft een dashboardwissel, vla-dashboard niet. Stond de
+      # definitie daar, dan viel deze router om zodra die service verdween.
+      - "traefik.http.middlewares.milkdemo-auth.basicauth.users=${DASHBOARD_AUTH}"
+      # ── losse hostname (blijft tijdens de parallelfase) ───────────────────
       - "traefik.http.routers.grafana.rule=Host(`grafana.${DOMAIN}`)"
       - "traefik.http.routers.grafana.entrypoints=websecure"
       - "traefik.http.routers.grafana.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.grafana.middlewares=milkdemo-auth"
+      - "traefik.http.routers.grafana.middlewares=milkdemo-auth@docker"
+      # ── same-origin embed-route: /grafana op de demo-hostname ─────────────
+      # Hiermee wordt PR-14's "een beveiligde URL" letterlijk waar: het iframe
+      # in scherm 5 is same-origin, dus de basicauth reist gewoon mee en het
+      # hele cross-site-cookieprobleem (SameSite=None, Safari ITP, Firefox
+      # Total Cookie Protection) verdwijnt.
+      #
+      # ⚠ GF_AUTH_ANONYMOUS_ENABLED blijft UIT. Aanzetten zou de complete
+      # historian publiek queryable maken: een anonieme bezoeker is Viewer, en
+      # een Viewer mag via de HTTP-API willekeurige queries naar elke datasource
+      # sturen.
+      - "traefik.http.routers.grafana-embed.rule=Host(`milkdemo.${DOMAIN}`) && PathPrefix(`/grafana`)"
+      - "traefik.http.routers.grafana-embed.entrypoints=websecure"
+      - "traefik.http.routers.grafana-embed.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.grafana-embed.middlewares=milkdemo-auth@docker"
+      - "traefik.http.routers.grafana-embed.priority=100"
+      - "traefik.http.routers.grafana-embed.service=grafana"
       - "traefik.http.services.grafana.loadbalancer.server.port=3000"
     depends_on:
       vla-tdengine:
