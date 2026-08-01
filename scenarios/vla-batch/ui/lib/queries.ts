@@ -125,3 +125,25 @@ export function useTagsVerbose(extra?: Extra<Record<string, TagReading>>) {
     extra,
   );
 }
+
+/* ---------------------------------------------------------- overige schermen */
+
+export function useOrders<T = unknown[]>(extra?: Extra<T>) {
+  return usePolled<T>(keys.orders, "/orders", POLL.lists, extra);
+}
+
+/** Detail bevriest de lijst-loop: zie useBatches(frozen). */
+export function useBatch<T = Record<string, unknown>>(id: string | null, extra?: Extra<T>) {
+  return usePolled<T>(keys.batch(id ?? "none"), `/batches/${id}`, POLL.lists, {
+    enabled: Boolean(id),
+    ...extra,
+  });
+}
+
+export function useOee<T = unknown[]>(extra?: Extra<T>) {
+  return usePolled<T>(keys.oee, "/oee", POLL.aggregates, extra);
+}
+
+export function useInventory<T = Record<string, unknown>>(extra?: Extra<T>) {
+  return usePolled<T>(keys.inventory, "/inventory", POLL.aggregates, extra);
+}
