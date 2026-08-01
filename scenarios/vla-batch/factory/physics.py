@@ -117,6 +117,23 @@ VISC_SPEC_MIN_cP = _envf("VISC_SPEC_MIN_cP", 150.0)      # matches factory-model
 AMBIENT_C = 20.0
 PACK_SIZE_L = 1.0
 
+# --- rauwmelksilo (receiving-tank-01) -------------------------------------
+# De silo trok tot nu toe NIETS af bij het doseren: de regel deed
+# `receiving_level_L - budget * 0.0`, dus de vermenigvuldiging met nul haalde
+# de onttrekking weg. Gevolg: 5000 kg melk per batch kwam uit het niets en het
+# niveau stond eeuwig op 8000 L. Dat was ook de reden dat de tag nooit op de
+# UNS verscheen: een change-based koppeling publiceert een constante nooit.
+RECEIVING_CAPACITY_L = _envf("RECEIVING_CAPACITY_L", 10000.0)
+RECEIVING_REFILL_BELOW_L = _envf("RECEIVING_REFILL_BELOW_L", 2500.0)
+RECEIVING_REFILL_RATE_L_S = _envf("RECEIVING_REFILL_RATE_L_S", 120.0)
+# Rauwe koemelk zit rond 1,03 kg/L. Het is een dichtheid en geen procesinstelling,
+# dus hij hoort hier en niet in het recept.
+MILK_DENSITY_KG_L = _envf("MILK_DENSITY_KG_L", 1.03)
+# Aanvoertemperatuur van een tankwagen, en de silo loopt langzaam op naar de
+# omgeving. Zo beweegt temp_C mee en is hij ook echt een meting.
+MILK_DELIVERY_C = _envf("MILK_DELIVERY_C", 5.0)
+RECEIVING_WARM_RATE_PER_S = _envf("RECEIVING_WARM_RATE_PER_S", 0.0008)
+
 
 class VlaProcess:
     """One production line running one batch at a time through the 6-state lifecycle."""
@@ -130,8 +147,9 @@ class VlaProcess:
         self.sim_time_s: float = 0.0
 
         # --- receiving-tank-01 ---
-        self.receiving_level_L: float = 8000.0
-        self.receiving_temp_C: float = 6.0
+        self.receiving_level_L: float = RECEIVING_CAPACITY_L * 0.8
+        self.receiving_temp_C: float = MILK_DELIVERY_C
+        self._receiving_filling: bool = False
         self.fat_setpoint_pct: float = 3.5
 
         # --- process-tank-01 (mixing) ---
@@ -325,6 +343,12 @@ class VlaProcess:
         else:
             self.agitator_rpm += (0.0 - self.agitator_rpm) * clamp(pdt * 0.5, 0, 1)
 
+        # De silo leeft ONAFHANKELIJK van de batch: hij wordt aangevuld en warmt
+        # langzaam op, ook als de lijn stilstaat. Dat is niet alleen realistisch,
+        # het is ook wat een niveaumeting tot een meting maakt in plaats van een
+        # constante die nooit gepubliceerd wordt.
+        self._tick_receiving(pdt)
+
         if self.state == DOSING:
             self._tick_dosing(pdt)
         elif self.state == COOKING:
@@ -335,6 +359,42 @@ class VlaProcess:
             self._tick_filling(pdt)
         # IDLE / COMPLETE: nothing to advance
 
+    def _tick_receiving(self, pdt: float) -> None:
+        """Rauwmelksilo: aanvulling en opwarming.
+
+        Zakt het niveau onder de drempel, dan komt er een tankwagen en loopt de
+        silo weer vol tot de capaciteit. De aangevoerde melk is koud, dus het
+        mengen van oud en nieuw trekt de temperatuur omlaag; daartussenin loopt
+        hij langzaam op naar de omgevingstemperatuur.
+
+        Zonder dit stond het niveau eeuwig stil op zijn beginwaarde en werd de
+        tag door de change-based OPC-UA-koppeling nooit gepubliceerd. De
+        ontvangsttank stond daardoor leeg op elk scherm.
+        """
+        if self.receiving_level_L < RECEIVING_REFILL_BELOW_L:
+            self._receiving_filling = True
+        if getattr(self, "_receiving_filling", False):
+            toevoer_L = min(
+                RECEIVING_REFILL_RATE_L_S * pdt,
+                RECEIVING_CAPACITY_L - self.receiving_level_L,
+            )
+            if toevoer_L > 0:
+                # Menging van twee volumes: gewogen gemiddelde, geen sprong.
+                totaal = self.receiving_level_L + toevoer_L
+                self.receiving_temp_C = (
+                    self.receiving_temp_C * self.receiving_level_L
+                    + MILK_DELIVERY_C * toevoer_L
+                ) / max(totaal, 1e-6)
+                self.receiving_level_L = totaal
+            if self.receiving_level_L >= RECEIVING_CAPACITY_L - 0.5:
+                self.receiving_level_L = RECEIVING_CAPACITY_L
+                self._receiving_filling = False
+        else:
+            # Gekoeld, maar niet perfect: de silo kruipt richting omgeving.
+            self.receiving_temp_C += (
+                (AMBIENT_C - self.receiving_temp_C) * RECEIVING_WARM_RATE_PER_S * pdt
+            )
+
     def _tick_dosing(self, pdt: float) -> None:
         self.phase = "dosing"
         # dose_off fault reduces the actually-delivered fraction of one material (milk)
@@ -342,6 +402,10 @@ class VlaProcess:
         # distribute dosing budget across materials proportionally to their setpoints
         total_sp = sum(self.dose_setpoint_kg.values()) or 1.0
         budget = DOSE_RATE_KG_S * pdt
+        # Stand voor deze tick, om verderop te weten hoeveel melk er ECHT uit de
+        # silo is gegaan. Het verschil, niet het budget: bij een dose_off-fout
+        # gaat er minder doorheen dan begroot.
+        milk_before_kg = self.dose_actual_kg["milk"]
         eff_setpoints: dict[str, float] = {}
         for mat, sp in self.dose_setpoint_kg.items():
             eff_sp = sp
@@ -370,8 +434,15 @@ class VlaProcess:
         total_sp_all = sum(self.dose_setpoint_kg.values()) or 1.0
         dosed_frac = clamp(sum(self.dose_actual_kg.values()) / total_sp_all, 0.0, 1.0)
         self.mix_level_L = self.batch_volume_L * dosed_frac
-        # pull from receiving tank (milk source)
-        self.receiving_level_L = max(0.0, self.receiving_level_L - budget * 0.0)
+
+        # Onttrekking uit de rauwmelksilo. ALLEEN melk komt daaruit; suiker,
+        # zetmeel en cacao zijn droge grondstoffen uit een andere stroom. De
+        # oude regel vermenigvuldigde de onttrekking met 0.0 en trok dus niets
+        # af, waardoor de melk uit het niets kwam en de silo nooit leegliep.
+        milk_drawn_kg = max(0.0, self.dose_actual_kg["milk"] - milk_before_kg)
+        self.receiving_level_L = max(
+            0.0, self.receiving_level_L - milk_drawn_kg / MILK_DENSITY_KG_L
+        )
 
         # gentle pre-warm during dosing
         self.mix_temp_C += (self.receiving_temp_C + 10.0 - self.mix_temp_C) * clamp(pdt * 0.1, 0, 1)

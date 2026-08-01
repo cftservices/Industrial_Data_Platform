@@ -102,6 +102,26 @@ export async function GET() {
     }
   }
 
+  /**
+   * Waarden die per definitie NOOIT veranderen, en daarom nooit op de bus komen.
+   *
+   * De OPC-UA-koppeling publiceert bij verandering. Een kook-setpoint van 88 en
+   * een pakgrootte van 1,0 veranderen nooit, dus die zijn na de eerste
+   * verbinding onzichtbaar en stonden op elk scherm als een streepje. Ze
+   * periodiek opnieuw laten publiceren zou werken, maar dat is precies wat de
+   * historian ooit 5,3 miljoen nutteloze rijen bezorgde voor een tag.
+   *
+   * Ze staan al in het recept, en dat is ook hun ware aard: een setpoint is
+   * CONFIGURATIE, geen meting. Dus halen we ze daar op en zeggen erbij dat het
+   * configuratie is. Doen alsof het een meting is, zou een leugen zijn over de
+   * herkomst.
+   */
+  const CONFIG_VALUE: Record<string, number | null> = {
+    "cooking/Setpoint": toNumber(recipe.cook_setpoint_C),
+    "cooling/Doel": toNumber(recipe.cool_target_C),
+    "filling/Pakgrootte": toNumber(recipe.pack_size_L),
+  };
+
   const reading = (area: string, eq: string, tag: string): Reading | null =>
     tags?.[statusTopic(area, eq, tag)] ?? null;
 
@@ -119,12 +139,20 @@ export async function GET() {
 
   const steps = STEPS.map((s) => {
     const primary = reading(s.area, s.equipment, s.primary.tag);
-    const secondary = s.secondary.map((t) => ({
-      label: t.label,
-      unit: t.unit,
-      value: toNumber(reading(s.area, s.equipment, t.tag)?.value),
-      stale: isStale(reading(s.area, s.equipment, t.tag)),
-    }));
+    const secondary = s.secondary.map((t) => {
+      const live = toNumber(reading(s.area, s.equipment, t.tag)?.value);
+      const config = live === null ? (CONFIG_VALUE[`${s.id}/${t.label}`] ?? null) : null;
+      return {
+        label: t.label,
+        unit: t.unit,
+        value: live ?? config,
+        // Configuratie is niet verouderd: hij hoort niet te veranderen. Hem als
+        // stale tonen zou een storing suggereren die er niet is.
+        stale: config !== null ? false : isStale(reading(s.area, s.equipment, t.tag)),
+        /** true als deze waarde uit het recept komt en niet van de bus. */
+        from_config: config !== null,
+      };
+    });
 
     const stale = isStale(primary) || secondary.some((x) => x.stale);
     const value = toNumber(primary?.value);

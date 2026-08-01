@@ -35,7 +35,14 @@ type Step = {
     age_s: number | null;
     quality: string;
   };
-  secondary: Array<{ label: string; unit: string; value: number | null; stale: boolean }>;
+  secondary: Array<{
+    label: string;
+    unit: string;
+    value: number | null;
+    stale: boolean;
+    /** Uit het recept in plaats van van de bus: configuratie, geen meting. */
+    from_config: boolean;
+  }>;
   spec: { min: number; max: number } | null;
   /** Schaal met bron, of null als er geen te verantwoorden schaal is. */
   scale: { min: number; max: number; source: string } | null;
@@ -150,8 +157,18 @@ function StepCard({ step }: { step: Step }) {
 
       {step.secondary.map((s) => (
         <div key={s.label} className="flex items-baseline justify-between gap-2 text-[0.8125rem]">
-          <span className="text-[0.6875rem] text-ink-muted">{s.label}</span>
-          <span className="font-semibold num">
+          <span className="text-[0.6875rem] text-ink-muted">
+            {s.label}
+            {/* Herkomst hoort zichtbaar te zijn. Een setpoint uit het recept
+                naast een live meting zetten zonder onderscheid, is liegen over
+                waar het getal vandaan komt. */}
+            {s.from_config && (
+              <span className="ml-1 text-[0.625rem] text-ink-faint" title="Uit het recept, geen meting">
+                recept
+              </span>
+            )}
+          </span>
+          <span className={`font-semibold num ${s.from_config ? "text-ink-muted" : ""}`}>
             {s.value === null ? EMPTY : `${fmt(s.value, s.unit)} ${s.unit}`.trim()}
           </span>
         </div>
