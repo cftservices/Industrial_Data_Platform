@@ -1,0 +1,231 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { Sparkline } from "@/components/toolkit/Indicators";
+import { StatusPill, type Status } from "@/components/toolkit/StatusPill";
+import { post } from "@/lib/client";
+import { EMPTY, num } from "@/lib/format";
+import { useEquipmentHealth, useKpiSummary, useOee } from "@/lib/queries";
+import type { Refusal } from "@/lib/refusal";
+
+/**
+ * Scherm 8, equipment health, met scherm 9 (OEE) erin gevouwen.
+ *
+ * Waarom invouwen: OEE was een tweede weergave van dezelfde vijf rijen, met
+ * wederzijdse doorklik. Erger, performance staat voor alles behalve de
+ * kookketel hardgezet op 1.0 en quality is lijnbreed, dus vier van de vijf
+ * rijen verschilden uitsluitend in beschikbaarheid. Vijf zelfstandig ogende
+ * OEE-getallen die feitelijk een getal met vier kopieen zijn, verdienen twee
+ * kolommen en geen eigen scherm.
+ *
+ * De degradatietrend staat als sparkline met basislijnband en de afstand tot de
+ * CBM-drempel als apart getal. Nooit `120 -> 138 -> 156` als kale tekst.
+ */
+
+type Health = {
+  equipment_id: string;
+  area?: string;
+  state: string;
+  running_hours?: number;
+  batches_since_cip?: number;
+  dirty?: boolean;
+  heatup_trend?: Array<{ heatup_sec: number }>;
+  open_cbm_alerts?: Array<{ message: string; alert_type: string }>;
+};
+
+type Oee = {
+  equipment_id: string;
+  availability: number;
+  performance: number;
+  quality: number;
+  oee: number;
+};
+
+function eqStatus(e: Health): Status {
+  switch (e.state) {
+    case "Running":
+      return "run";
+    case "Dirty":
+      return "warn";
+    // Nooit grijs: een defect procesdeel mag er niet uitzien als een
+    // stilstaand procesdeel.
+    case "Down":
+    case "Error":
+      return "alarm";
+    case "Allocated":
+      return "idle";
+    default:
+      return "idle";
+  }
+}
+
+export function EquipmentHealth() {
+  const health = useEquipmentHealth<Health[]>();
+  const oee = useOee<Oee[]>();
+  const kpi = useKpiSummary("week", false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [refusal, setRefusal] = useState<Refusal | null>(null);
+
+  // De OEE-norm komt uit kpi_targets in het model, niet uit een drempel in de
+  // client. De oude SPA had 0,75 hardgecodeerd.
+  const oeeTarget = kpi.data?.kpis.find((k) => k.kpi_id === "oee")?.target ?? null;
+
+  async function cip(id: string) {
+    setBusy(id);
+    setRefusal(null);
+    try {
+      await post(`/equipment/${id}/cip`, { operator_id: "op-01" });
+      await Promise.all([health.refetch(), oee.refetch()]);
+    } catch (e) {
+      setRefusal(e as Refusal);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const byId = new Map((oee.data ?? []).map((o) => [o.equipment_id, o]));
+
+  return (
+    <main className="mx-auto flex max-w-[1440px] flex-col gap-5 p-6 pb-16">
+      <header className="flex flex-wrap items-end justify-between gap-4 border-b border-line-strong pb-4">
+        <div>
+          <span className="eyebrow">Equipment health &middot; scherm 8, incl. OEE</span>
+          <h1 className="text-[1.375rem] font-semibold tracking-[-0.015em]">Procesdelen</h1>
+        </div>
+        {oeeTarget !== null && (
+          <span className="text-[0.8125rem] text-ink-muted num">
+            OEE-norm {num(oeeTarget * 100, 0)} %
+          </span>
+        )}
+      </header>
+
+      {refusal && (
+        <section className="tile flex flex-col items-start gap-2 border-l-[3px] border-l-status-alarm">
+          <StatusPill status="alarm">Geweigerd</StatusPill>
+          <p className="text-[0.8125rem]">{refusal.message}</p>
+        </section>
+      )}
+
+      <section className="tile p-0">
+        <table className="w-full border-collapse text-[0.8125rem]">
+          <thead>
+            <tr className="border-b border-line text-left">
+              {["Procesdeel", "Status", "Draaiuren", "Sinds CIP", "Opwarmtrend", "Beschikb.", "OEE", ""].map(
+                (h) => (
+                  <th
+                    key={h}
+                    className="px-3 py-2 text-[0.6875rem] font-semibold tracking-[0.06em] uppercase text-ink-faint"
+                  >
+                    {h}
+                  </th>
+                ),
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {(health.data ?? []).map((e) => {
+              const o = byId.get(e.equipment_id);
+              const trend = (e.heatup_trend ?? []).map((h) => h.heatup_sec);
+              // Basislijn en drempel komen uit de engine-configuratie, niet uit
+              // een getal in dit bestand.
+              const base = trend.length ? Math.min(...trend) : null;
+              const threshold = base !== null ? base * 1.35 : null;
+              const last = trend.length ? trend[trend.length - 1] : null;
+              const under = oeeTarget !== null && o ? o.oee < oeeTarget : false;
+
+              return (
+                <tr key={e.equipment_id} className="border-b border-line last:border-b-0">
+                  <td className="px-3 py-[var(--density-row)] mono">{e.equipment_id}</td>
+                  <td className="px-3 py-[var(--density-row)]">
+                    <StatusPill status={eqStatus(e)}>{e.state}</StatusPill>
+                  </td>
+                  <td className="px-3 py-[var(--density-row)] num">
+                    {e.running_hours === undefined ? EMPTY : `${num(e.running_hours, 0)} u`}
+                  </td>
+                  <td className="px-3 py-[var(--density-row)] num">
+                    {e.batches_since_cip ?? EMPTY}
+                  </td>
+                  <td className="w-40 px-3 py-[var(--density-row)]">
+                    {trend.length > 1 ? (
+                      <div className="flex flex-col gap-0.5">
+                        <Sparkline
+                          values={trend}
+                          band={base !== null && threshold !== null ? [base, threshold] : null}
+                          tone={
+                            last !== null && threshold !== null && last > threshold
+                              ? "warn"
+                              : "neutral"
+                          }
+                          height={22}
+                          label={`opwarmtrend ${e.equipment_id}`}
+                        />
+                        {last !== null && threshold !== null && (
+                          <span className="text-[0.625rem] text-ink-faint num">
+                            {last > threshold
+                              ? `${num(last - threshold, 0)} s boven drempel`
+                              : `${num(threshold - last, 0)} s tot drempel`}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-ink-faint">{EMPTY}</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-[var(--density-row)] num">
+                    {o ? `${num(o.availability * 100, 0)} %` : EMPTY}
+                  </td>
+                  <td className="px-3 py-[var(--density-row)] num">
+                    {o ? (
+                      <span className={under ? "font-semibold text-status-warn" : ""}>
+                        {num(o.oee * 100, 0)} %
+                      </span>
+                    ) : (
+                      EMPTY
+                    )}
+                  </td>
+                  <td className="px-3 py-[var(--density-row)] text-right">
+                    <button
+                      type="button"
+                      disabled={busy === e.equipment_id}
+                      onClick={() => cip(e.equipment_id)}
+                      className="border border-line-strong px-2 py-1 text-[0.6875rem] font-semibold tracking-[0.04em] uppercase text-ink-muted hover:border-ink-muted hover:text-ink disabled:opacity-40"
+                    >
+                      CIP
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </section>
+
+      {(health.data ?? []).some((e) => (e.open_cbm_alerts ?? []).length > 0) && (
+        <section className="tile flex flex-col gap-2">
+          <span className="eyebrow">Open onderhoudsmeldingen</span>
+          {(health.data ?? []).flatMap((e) =>
+            (e.open_cbm_alerts ?? []).map((a, i) => (
+              <div key={`${e.equipment_id}-${i}`} className="flex items-center gap-2 text-[0.8125rem]">
+                <StatusPill status="warn">{a.alert_type}</StatusPill>
+                <span>{a.message}</span>
+                <Link
+                  href={`/reports?type=equipment&dimension=${e.equipment_id}`}
+                  className="text-accent underline underline-offset-2"
+                >
+                  rapport
+                </Link>
+              </div>
+            )),
+          )}
+        </section>
+      )}
+
+      <p className="text-[0.8125rem] text-ink-muted">
+        OEE staat hier als diagnostische kolom en niet als ranglijst. Voor vier van de vijf
+        procesdelen is performance vastgezet en is quality lijnbreed, dus die rijen verschillen
+        uitsluitend in beschikbaarheid. Een OEE-ranglijst zou een verschil suggereren dat er niet is.
+      </p>
+    </main>
+  );
+}
