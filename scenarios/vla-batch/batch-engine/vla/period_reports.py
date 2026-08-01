@@ -85,6 +85,9 @@ def assemble_period_report(db, days: int | None = None,
         from .kpi import window_bounds  # lokaal: geen cyclus
 
         cutoff, end = window_bounds(window, now)
+        # Geen dagen melden naast een venster: "window: month, window_days: 7"
+        # leest als een tegenspraak in het rapport zelf.
+        days = None
     else:
         days = 7 if days is None else days
         cutoff, end = now - timedelta(days=days), now
