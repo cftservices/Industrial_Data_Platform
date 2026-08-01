@@ -87,7 +87,7 @@ export function EquipmentHealth() {
   const byId = new Map((oee.data ?? []).map((o) => [o.equipment_id, o]));
 
   return (
-    <main className="mx-auto flex max-w-[1440px] flex-col gap-5 p-6 pb-16">
+    <main className="mx-auto flex max-w-[1440px] flex-col gap-4 p-3 pb-16 sm:gap-5 sm:p-6">
       <header className="flex flex-wrap items-end justify-between gap-4 border-b border-line-strong pb-4">
         <div>
           <span className="eyebrow">Equipment health &middot; scherm 8, incl. OEE</span>
@@ -107,7 +107,7 @@ export function EquipmentHealth() {
         </section>
       )}
 
-      <section className="tile p-0">
+      <section className="tile table-scroll p-0">
         <table className="w-full border-collapse text-[0.8125rem]">
           <thead>
             <tr className="border-b border-line text-left">

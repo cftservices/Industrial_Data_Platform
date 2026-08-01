@@ -125,7 +125,7 @@ function Load({ load }: { load?: AlarmLoad }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {[
           { k: "Per uur", v: load.per_hour, t: t ? `${t.acceptable} tot ${t.max}` : null },
           { k: "Per 10 min", v: load.per_10min, t: "1 tot 2" },
@@ -197,7 +197,7 @@ export function AlarmsScreen() {
   const rows = (alarms.data ?? []) as Alarm[];
 
   return (
-    <main className="mx-auto flex max-w-[1500px] flex-col gap-4 p-4 pb-16">
+    <main className="mx-auto flex max-w-[1500px] flex-col gap-3 p-2 pb-16 sm:gap-4 sm:p-4">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <span className="eyebrow">Operator &middot; scherm 14</span>
@@ -235,7 +235,7 @@ export function AlarmsScreen() {
             {rows.map((a) => (
               <li key={a.alarm_id} className="border-b border-line last:border-b-0">
                 <div
-                  className={`grid grid-cols-[5.5rem_minmax(0,1fr)_6rem_9rem] items-center gap-3 px-3 py-[var(--density-row)] ${
+                  className={`grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-1 px-3 py-[var(--density-row)] sm:grid-cols-[5.5rem_minmax(0,1fr)_6rem_9rem] sm:items-center ${
                     a.state !== "open" ? "opacity-70" : ""
                   }`}
                 >
@@ -263,9 +263,9 @@ export function AlarmsScreen() {
                     </span>
                   </span>
 
-                  <span className="text-[0.8125rem] text-ink-muted num">{shortTime(a.ts)}</span>
+                  <span className="col-start-2 text-[0.8125rem] text-ink-muted num sm:col-start-auto">{shortTime(a.ts)}</span>
 
-                  <span className="flex justify-end gap-1.5">
+                  <span className="col-start-2 flex flex-wrap justify-start gap-1.5 sm:col-start-auto sm:justify-end">
                     {a.state === "open" ? (
                       <>
                         <button

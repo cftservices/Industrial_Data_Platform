@@ -30,7 +30,7 @@ const DRILL: Record<string, { href: string; label: string }> = {
 function Row({ item, rank }: { item: LossItem; rank: number }) {
   const drill = DRILL[item.category];
   return (
-    <div className="grid grid-cols-[1.4rem_minmax(0,1fr)_auto] items-center gap-2.5 py-[var(--density-row)]">
+    <div className="grid grid-cols-[1.4rem_minmax(0,1fr)] items-start gap-x-2.5 gap-y-1 py-[var(--density-row)] sm:grid-cols-[1.4rem_minmax(0,1fr)_auto] sm:items-center">
       <span className="text-[0.8125rem] font-semibold text-ink-faint num">{rank}</span>
       <span className="flex min-w-0 flex-col gap-0.5">
         <span className="font-semibold">{item.label}</span>
@@ -49,7 +49,7 @@ function Row({ item, rank }: { item: LossItem; rank: number }) {
           )}
         </span>
       </span>
-      <span className="flex flex-col items-end gap-0.5">
+      <span className="col-start-2 flex flex-row items-baseline gap-2 sm:col-start-auto sm:flex-col sm:items-end">
         <span className="font-semibold num">{money(item.amount, item.currency)}</span>
         {item.share_pct !== null && (
           <span className="text-[0.8125rem] text-ink-faint num">{item.share_pct} %</span>

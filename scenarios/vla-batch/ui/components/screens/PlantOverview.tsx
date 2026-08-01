@@ -98,7 +98,7 @@ export function PlantOverview() {
   const openOrders = (orders.data ?? []).filter((o) => o.status !== "DONE");
 
   return (
-    <main className="mx-auto flex max-w-[1440px] flex-col gap-5 p-6 pb-16">
+    <main className="mx-auto flex max-w-[1440px] flex-col gap-4 p-3 pb-16 sm:gap-5 sm:p-6">
       {!sales && (
         <AlarmBar alarms={(alarms.data ?? []) as Alarm[]} load={kpi.data?.alarm_load} onAck={ack} />
       )}
@@ -168,7 +168,7 @@ export function PlantOverview() {
           )}
         </div>
 
-        <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(215px,1fr))]">
+        <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,215px),1fr))]">
           {(kpi.data?.kpis ?? [])
             .filter((k) =>
               ["quality_ratio", "scrap_ratio", "plan_attainment_pct", "throughput_rate"].includes(
@@ -194,7 +194,7 @@ export function PlantOverview() {
               {openOrders.map((o) => (
                 <li
                   key={o.order_id}
-                  className="grid grid-cols-[7rem_1fr_5rem] items-center gap-3 border-b border-line py-[var(--density-row)] last:border-b-0"
+                  className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b border-line py-[var(--density-row)] last:border-b-0 sm:grid-cols-[7rem_1fr_5rem]"
                 >
                   <span className="mono">{o.order_id}</span>
                   <span className="h-1.5 bg-surface-sunken">

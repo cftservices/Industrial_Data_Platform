@@ -382,3 +382,16 @@ def test_future_time_is_not_counted_as_downtime():
     value, _ = kpi._utilization_efficiency(db, start, end)
     assert value is not None
     assert value > 0.0, "benutting mag niet naar nul zakken door toekomstige tijd"
+
+
+def test_dirty_counts_as_productive_not_downtime():
+    """Een vervuilde kookketel kookt door. Hem als stilstand tellen straft
+    dubbel, want de vervuiling verlaagt al de performance, en het leverde in
+    productie een benuttingsgraad van 0,68 procent op voor een lijn die de hele
+    week draaide."""
+    assert "Dirty" not in kpi._DOWNTIME_STATES
+    assert "Dirty" in kpi._PRODUCTIVE_STATES
+    db = _seeded_db(n_ok=6, n_bad=1)
+    value, _ = kpi._utilization_efficiency(db, *kpi.window_bounds("week"))
+    assert value is not None
+    assert value > 50.0, f"benutting {value} is onwaarschijnlijk laag voor een draaiende lijn"

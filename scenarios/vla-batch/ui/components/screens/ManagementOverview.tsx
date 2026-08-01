@@ -39,7 +39,7 @@ export function ManagementOverview() {
   }
 
   return (
-    <main className="mx-auto flex max-w-[1440px] flex-col gap-5 p-6 pb-16">
+    <main className="mx-auto flex max-w-[1440px] flex-col gap-4 p-3 pb-16 sm:gap-5 sm:p-6">
       <header className="flex flex-wrap items-end justify-between gap-4 border-b border-line-strong pb-4">
         <div className="flex flex-col gap-0.5">
           <span className="eyebrow">Managementoverzicht &middot; scherm 12</span>
@@ -110,7 +110,7 @@ export function ManagementOverview() {
           </button>
         </section>
       ) : isPending ? (
-        <section className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(215px,1fr))]">
+        <section className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,215px),1fr))]">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="tile h-[188px] animate-pulse bg-surface-sunken" />
           ))}

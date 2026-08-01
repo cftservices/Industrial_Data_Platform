@@ -61,7 +61,7 @@ export function ReportCentre() {
           : null;
 
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-5 p-6 pb-16">
+    <main className="mx-auto flex max-w-3xl flex-col gap-4 p-3 pb-16 sm:gap-5 sm:p-6">
       <header className="border-b border-line-strong pb-4">
         <span className="eyebrow">Report centre &middot; scherm 10</span>
         <h1 className="text-[1.375rem] font-semibold tracking-[-0.015em]">Rapporten</h1>

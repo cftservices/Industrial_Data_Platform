@@ -118,7 +118,7 @@ export function Shopfloor() {
   }
 
   return (
-    <main className="mx-auto flex max-w-4xl flex-col gap-4 p-4 pb-16">
+    <main className="mx-auto flex max-w-4xl flex-col gap-3 p-2 pb-16 sm:gap-4 sm:p-4">
       <header>
         <span className="eyebrow">Werkvloer &middot; scan en weeg</span>
         <h1 className="text-lg font-semibold tracking-[-0.015em]">Afwegen</h1>
@@ -179,7 +179,7 @@ export function Shopfloor() {
           {result.materials.map((m) => (
             <div
               key={m.material_id}
-              className="grid grid-cols-[7rem_1fr_auto] items-center gap-3 border-b border-line py-[var(--density-row)] last:border-b-0"
+              className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b border-line py-[var(--density-row)] last:border-b-0 sm:grid-cols-[7rem_1fr_auto]"
             >
               <span className="mono">{m.material_id}</span>
               <span className="text-[0.8125rem] num">

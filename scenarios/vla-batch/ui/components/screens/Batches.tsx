@@ -81,7 +81,7 @@ export function Batches() {
   const spec = model.data?.recipe?.viscosity_spec_cP ?? null;
 
   return (
-    <main className="mx-auto flex max-w-[1440px] flex-col gap-5 p-6 pb-16">
+    <main className="mx-auto flex max-w-[1440px] flex-col gap-4 p-3 pb-16 sm:gap-5 sm:p-6">
       <header className="flex flex-wrap items-end justify-between gap-4 border-b border-line-strong pb-4">
         <div>
           <span className="eyebrow">Batches &middot; scherm 2</span>
@@ -99,7 +99,7 @@ export function Batches() {
       </header>
 
       <div className="grid items-start gap-5 lg:[grid-template-columns:minmax(0,1.4fr)_minmax(0,1fr)]">
-        <section className="tile p-0">
+        <section className="tile table-scroll p-0">
           <table className="w-full border-collapse text-[0.8125rem]">
             <thead>
               <tr className="border-b border-line text-left">

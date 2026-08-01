@@ -102,7 +102,7 @@ export function KpiTile({ kpi }: { kpi: KpiValue }) {
       {kpi.reason && <p className="text-[0.6875rem] text-ink-faint">{kpi.reason}</p>}
 
       {open && (
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 border-t border-line pt-2 text-[0.6875rem] text-ink-muted">
+        <dl className="grid grid-cols-1 gap-x-3 gap-y-1 border-t border-line pt-2 text-[0.6875rem] text-ink-muted sm:grid-cols-[auto_1fr]">
           <dt className="font-semibold">Formule</dt>
           <dd className="mono">{kpi.formula}</dd>
           <dt className="font-semibold">Timing</dt>

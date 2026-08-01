@@ -66,7 +66,7 @@ export function Scada() {
   const recipe = model.data?.recipe;
 
   return (
-    <main className="mx-auto flex max-w-4xl flex-col gap-4 p-4 pb-16">
+    <main className="mx-auto flex max-w-4xl flex-col gap-3 p-2 pb-16 sm:gap-4 sm:p-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <span className="eyebrow">SCADA-console &middot; scherm 4</span>

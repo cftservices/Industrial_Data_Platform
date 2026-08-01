@@ -78,7 +78,7 @@ export function AlarmBar({
     <div
       role="region"
       aria-label="Alarmen"
-      className={`sticky top-0 z-10 flex flex-wrap items-center gap-x-5 border border-line-strong bg-surface px-3 py-2 ${
+      className={`sticky top-0 z-10 flex flex-wrap items-center gap-x-4 gap-y-1.5 border border-line-strong bg-surface px-2 py-2 sm:gap-x-5 sm:px-3 ${
         counts.high > 0 ? "border-l-[3px] border-l-status-alarm" : ""
       }`}
     >
@@ -91,7 +91,7 @@ export function AlarmBar({
         ))}
       </div>
 
-      <div className="flex min-w-0 flex-1 basis-[22rem] items-center gap-2 border-l border-line pl-4">
+      <div className="flex min-w-0 flex-1 basis-full items-center gap-2 border-line pl-0 sm:basis-[22rem] sm:border-l sm:pl-4">
         {top ? (
           <>
             <StatusPill status={PRIORITY_STATUS[top.priority]}>

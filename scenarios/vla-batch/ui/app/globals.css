@@ -270,3 +270,35 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ============================================================================
+   RESPONSIEF
+   Regel: de pagina zelf schuift nooit horizontaal. Brede inhoud (tabellen,
+   grafieken) scrollt in zijn eigen container.
+   ========================================================================= */
+
+html, body { max-width: 100%; overflow-x: hidden; }
+
+/* Tabellen zijn op een telefoon het eerste dat breekt. */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.table-scroll > table { min-width: 34rem; }
+
+/* Aanraakdoelen. 44 px is de gangbare ondergrens; met handschoenen aan een
+   vullijn is dat geen luxe. */
+@media (pointer: coarse) {
+  button, a[href], select, input, summary {
+    min-height: 44px;
+  }
+  button, a[href] { touch-action: manipulation; }
+}
+
+/* Op smalle schermen mag de chrome krimpen, maar de dichtheid van de
+   ops-familie blijft: een operator wil meer zien, niet minder. */
+@media (max-width: 640px) {
+  [data-ui="mgmt"] { --tile-pad: 0.75rem; }
+  [data-ui="ops"] { --tile-pad: 0.625rem; }
+  body { font-size: 0.9375rem; }
+}

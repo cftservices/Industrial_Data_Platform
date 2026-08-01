@@ -197,7 +197,7 @@ export function LineOverview() {
   const totals = line.data?.line?.dose_totals;
 
   return (
-    <main className="mx-auto flex max-w-[1500px] flex-col gap-4 p-4 pb-16">
+    <main className="mx-auto flex max-w-[1500px] flex-col gap-3 p-2 pb-16 sm:gap-4 sm:p-4">
       <AlarmBar
         alarms={(alarms.data ?? []) as Alarm[]}
         load={kpi.data?.alarm_load}
@@ -261,7 +261,7 @@ export function LineOverview() {
         <>
           <section
             aria-label="Processtappen"
-            className="grid gap-px border border-line-strong bg-line-strong [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]"
+            className="grid gap-px border border-line-strong bg-line-strong [grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr))]"
           >
             {(line.data?.steps ?? []).map((s) => (
               <StepCard key={s.id} step={s} />
@@ -304,7 +304,7 @@ export function LineOverview() {
                     return (
                       <div
                         key={d.material_id}
-                        className="grid grid-cols-[4.5rem_1fr_4.5rem] items-center gap-2"
+                        className="grid grid-cols-[3.5rem_1fr_3.5rem] items-center gap-2 sm:grid-cols-[4.5rem_1fr_4.5rem]"
                       >
                         <span className="text-[0.6875rem] text-ink-muted">{d.material_id}</span>
                         <span className="relative h-2 border border-line bg-surface-sunken">
