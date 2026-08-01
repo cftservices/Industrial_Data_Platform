@@ -76,6 +76,7 @@ export type KpiSummary = {
   compare: boolean;
   kpis: KpiValue[];
   losses: Losses;
+  alarm_load?: AlarmLoad;
   generated_at: string;
 };
 
