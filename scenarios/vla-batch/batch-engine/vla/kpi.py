@@ -67,24 +67,14 @@ WINDOWS = ("shift", "day", "week", "month")
 # Minimaal aantal batches met een eind-viscositeit voordat Cpk iets betekent.
 CAPABILITY_MIN_SAMPLES = 8
 
-# Dirty is GEEN stilstand. Een vervuilde kookketel kookt gewoon door; hij warmt
-# alleen trager op, en de batch komt er af. Volgens het ISO 22400-tijdmodel is
-# dat waarde-toevoegende tijd en hoort het in APT.
-#
-# Hem als stilstand tellen straft bovendien dubbel: de vervuiling verlaagt al de
-# performance via de opwarmtrend, en dezelfde tijd zou daarnaast als
-# onbeschikbaar meetellen. Dat is precies de dubbeltelling die het verliesblok
-# elders verbiedt. In productie leverde het een benuttingsgraad van 0,68 procent
-# op voor een lijn die de hele week batches maakte: geen meting maar een
-# artefact.
-#
-# Openstaand en bewust niet meegenomen: de tijd dat de lijn WACHT op een CIP
-# omdat Dirty nieuwe batches blokkeert, is wel echte stilstand. Die is nu niet
-# apart zichtbaar; daarvoor moet de statehistorie onderscheiden of er in dat
-# interval een batch liep.
-_DOWNTIME_STATES = {"Down", "Error"}
-_PRODUCTIVE_STATES = {"Running", "Dirty"}
-_NEUTRAL_STATES = {"Idle", "Allocated"}
+# De indeling van equipment-states staat in model.py, niet hier. Zie de noot
+# daar: toen deze verzamelingen op twee plekken stonden, landde de
+# Dirty-herclassificatie alleen in dit bestand en spraken /oee en /kpi/summary
+# elkaar op het scherm tegen. De aliassen blijven bestaan zodat bestaande
+# imports blijven werken.
+_DOWNTIME_STATES = M.DOWNTIME_STATES
+_PRODUCTIVE_STATES = M.PRODUCTIVE_STATES
+_NEUTRAL_STATES = M.NEUTRAL_STATES
 
 
 # --------------------------------------------------------------------- helpers

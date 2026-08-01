@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { AlarmBar } from "@/components/toolkit/AlarmBar";
 import { DeviationBand, StaleVeil } from "@/components/toolkit/Indicators";
@@ -159,7 +160,17 @@ function StepCard({ step }: { step: Step }) {
         <span className="text-[0.8125rem] font-semibold">{step.name}</span>
         <StatusPill status={status} />
       </div>
-      <div className="mono text-ink-faint">{step.equipment}</div>
+      {/* Het procesdeel is een doorklik naar zijn onderhoud: draaiuren, CIP,
+          opwarmtrend. Dat is de vraag die volgt op "deze stap loopt uit band". */}
+      <div className="mono text-ink-faint">
+        <Link
+          href="/equipment"
+          title={`${step.equipment}: CIP, draaiuren, OEE`}
+          className="underline underline-offset-2 hover:text-ink-muted"
+        >
+          {step.equipment}
+        </Link>
+      </div>
 
       {step.stale ? <StaleVeil>{body}</StaleVeil> : body}
 
@@ -208,15 +219,41 @@ export function LineOverview() {
         <div>
           <span className="eyebrow">Level 1, operator</span>
           <h1 className="text-lg font-semibold tracking-[-0.015em]">DairyWorks, lijn Vla</h1>
-          <div className="flex gap-6 text-[0.8125rem] text-ink-muted">
+          <div className="flex flex-wrap gap-x-6 gap-y-1 text-[0.8125rem] text-ink-muted">
             {batch ? (
               <span>
-                Batch <span className="mono">{batch.batch_id}</span> &middot; {batch.state}
+                Batch{" "}
+                <Link
+                  href={`/batches?batch=${batch.batch_id}`}
+                  className="mono font-semibold text-accent underline underline-offset-2 hover:text-ink"
+                >
+                  {batch.batch_id}
+                </Link>{" "}
+                &middot; {batch.state}
               </span>
             ) : (
-              <span>Geen actieve batch</span>
+              <span>
+                Geen actieve batch,{" "}
+                <Link
+                  href="/scada"
+                  className="font-semibold text-accent underline underline-offset-2 hover:text-ink"
+                >
+                  start er een
+                </Link>
+              </span>
             )}
             <span className="num">{shortTime(new Date().toISOString())}</span>
+            <span className="flex gap-3">
+              <Link href="/shopfloor" className="underline underline-offset-2 hover:text-ink">
+                werkvloer
+              </Link>
+              <Link href="/scada" className="underline underline-offset-2 hover:text-ink">
+                bediening
+              </Link>
+              <Link href="/alarms" className="underline underline-offset-2 hover:text-ink">
+                alarmen
+              </Link>
+            </span>
           </div>
         </div>
 

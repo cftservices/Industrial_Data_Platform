@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { PRIORITY_STATUS, type Alarm as BarAlarm } from "@/components/toolkit/AlarmBar";
+import { CrossLink, ScreenHeader } from "@/components/nav/ScreenHeader";
+import { PRIORITY_STATUS } from "@/components/toolkit/AlarmBar";
 import { StatusPill } from "@/components/toolkit/StatusPill";
 import { post } from "@/lib/client";
 import { num, shortDateTime, shortTime } from "@/lib/format";
@@ -176,6 +178,10 @@ export function AlarmsScreen() {
   const params = useSearchParams();
   const router = useRouter();
   const filter = params.get("priority") ?? "";
+  // Doorklik vanaf equipment health: laat alleen de meldingen van dat
+  // procesdeel zien. Filteren gebeurt client-side; /alarms kent geen
+  // equipment-parameter en die erbij verzinnen zou het contract oprekken.
+  const equipmentFilter = params.get("equipment");
   const [shelving, setShelving] = useState<string | null>(null);
 
   const alarms = useAlarms(filter);
@@ -194,15 +200,22 @@ export function AlarmsScreen() {
     await alarms.refetch();
   }
 
-  const rows = (alarms.data ?? []) as Alarm[];
+  const rows = ((alarms.data ?? []) as Alarm[]).filter(
+    (a) => !equipmentFilter || a.equipment_id === equipmentFilter,
+  );
 
   return (
     <main className="mx-auto flex max-w-[1500px] flex-col gap-3 p-2 pb-16 sm:gap-4 sm:p-4">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <span className="eyebrow">Operator &middot; scherm 14</span>
-          <h1 className="text-lg font-semibold tracking-[-0.015em]">Alarmen</h1>
-        </div>
+      <ScreenHeader
+        eyebrow="Operator"
+        title="Alarmen"
+        subtitle="Bevestigen en parkeren. Parkeren vraagt altijd een reden en een einddatum."
+        actions={[
+          { href: "/line", label: "Lijn L1", title: "Waar het alarm vandaan komt" },
+          { href: "/equipment", label: "Equipment" },
+          { href: "/scada", label: "SCADA" },
+        ]}
+      >
         <div
           role="group"
           aria-label="Filter op prioriteit"
@@ -222,7 +235,16 @@ export function AlarmsScreen() {
             </button>
           ))}
         </div>
-      </header>
+      </ScreenHeader>
+
+      {equipmentFilter && (
+        <p className="flex flex-wrap items-center gap-2 text-[0.8125rem]">
+          alleen meldingen van <span className="mono">{equipmentFilter}</span>
+          <Link href="/alarms" className="text-accent underline underline-offset-2">
+            alles tonen
+          </Link>
+        </p>
+      )}
 
       <div className="grid items-start gap-4 lg:[grid-template-columns:minmax(0,1.5fr)_minmax(0,1fr)]">
         <section className="tile p-0">
@@ -253,10 +275,29 @@ export function AlarmsScreen() {
 
                   <span className="flex min-w-0 flex-col gap-0.5">
                     <span className="text-[0.8125rem]">{a.message}</span>
+                    {/* De herkomst is een doorklik, geen dood label. Een alarm
+                        dat een equipment_id draagt en je niet naar dat
+                        procesdeel brengt, laat je zelf zoeken. */}
                     <span className="mono text-ink-faint">
-                      {a.equipment_id ?? "lijn"}
+                      {a.equipment_id ? (
+                        <CrossLink
+                          href={`/equipment`}
+                          title={`Procesdeel ${a.equipment_id}: CIP, draaiuren, OEE`}
+                        >
+                          {a.equipment_id}
+                        </CrossLink>
+                      ) : (
+                        "lijn"
+                      )}
                       {a.alarm_type ? `/${a.alarm_type}` : ""}
-                      {a.batch_id ? ` · ${a.batch_id}` : ""}
+                      {a.batch_id && (
+                        <>
+                          {" · "}
+                          <CrossLink href={`/batches?batch=${a.batch_id}`} title="Batchdetail">
+                            {a.batch_id}
+                          </CrossLink>
+                        </>
+                      )}
                       {a.state === "shelved" && a.shelved_reason
                         ? ` · ${a.shelved_reason} tot ${shortDateTime(a.shelved_until)}`
                         : ""}
@@ -335,7 +376,14 @@ export function AlarmsScreen() {
                         {i + 1}
                       </span>
                       <span className="flex min-w-0 flex-col gap-0.5">
-                        <span className="mono truncate">{s.source}</span>
+                        <span className="mono truncate">
+                          <CrossLink
+                            href={`/alarms?equipment=${encodeURIComponent(s.source)}`}
+                            title="Alleen de meldingen van deze bron"
+                          >
+                            {s.source}
+                          </CrossLink>
+                        </span>
                         <span className="h-1 bg-surface-sunken">
                           <i
                             className="block h-full bg-ink-muted"

@@ -8,8 +8,9 @@
     "start": "next start",
     "lint:tokens": "node scripts/lint-tokens.mjs",
     "check:contrast": "node scripts/contrast-check.mjs",
-    "verify": "npm run lint:tokens && npm run check:contrast && npm run build && npm run check:families",
+    "verify": "npm run lint:tokens && npm run check:contrast && npm run check:parity && npm run build && npm run check:families",
     "check:families": "node scripts/check-families.mjs",
+    "check:parity": "node scripts/check-parity.mjs",
     "test:e2e": "playwright test",
     "test:e2e:update": "playwright test --update-snapshots"
   },

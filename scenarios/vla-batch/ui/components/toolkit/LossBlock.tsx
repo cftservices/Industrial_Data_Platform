@@ -19,12 +19,16 @@ import type { Losses, LossItem } from "@/lib/types";
  * leidt tot het verkeerde besluit, dus bij een fout gaat het geheel naar retry.
  */
 
-/** Waar een verliescategorie naartoe doorklikt. */
+/**
+ * Waar een verliescategorie naartoe doorklikt: altijd naar de VEROORZAKER, niet
+ * naar een tweede weergave van hetzelfde bedrag. Een verliesregel die nergens
+ * heen leidt, is een verwijt zonder adres.
+ */
 const DRILL: Record<string, { href: string; label: string }> = {
-  material_overdose: { href: "/reports?type=weigh", label: "naar afweegrapport" },
-  scrap: { href: "/batches?verdict=REJECTED", label: "naar batches" },
-  downtime: { href: "/equipment", label: "naar oorzaak" },
-  rework: { href: "/batches?verdict=HOLD", label: "naar batches" },
+  material_overdose: { href: "/voorraad", label: "naar voorraad en verbruik" },
+  scrap: { href: "/batches?verdict=REJECTED", label: "naar de afgekeurde batches" },
+  downtime: { href: "/equipment", label: "naar de procesdelen" },
+  rework: { href: "/batches?verdict=HOLD", label: "naar de batches op HOLD" },
 };
 
 function Row({ item, rank }: { item: LossItem; rank: number }) {
@@ -63,6 +67,7 @@ function Row({ item, rank }: { item: LossItem; rank: number }) {
 }
 
 function Resultant({ item }: { item: LossItem }) {
+  const drill = DRILL[item.category];
   return (
     <div className="grid grid-cols-[1.4rem_1.25rem_minmax(0,1fr)_auto] items-center gap-2.5 py-0.5">
       <span />
@@ -70,7 +75,18 @@ function Resultant({ item }: { item: LossItem }) {
         &#8627;
       </span>
       <span className="text-[0.8125rem] text-ink-muted">
-        volgt uit: {item.label} {item.cause ? `(${item.cause})` : ""}
+        volgt uit:{" "}
+        {drill ? (
+          <Link
+            href={drill.href}
+            className="font-semibold text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent"
+          >
+            {item.label}
+          </Link>
+        ) : (
+          item.label
+        )}{" "}
+        {item.cause ? `(${item.cause})` : ""}
       </span>
       <span className="text-[0.8125rem] font-medium text-ink-muted num">
         {money(item.amount, item.currency)}

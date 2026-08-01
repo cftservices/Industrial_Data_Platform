@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { CrossLink, ScreenHeader } from "@/components/nav/ScreenHeader";
 import { RefusalPanel } from "@/components/toolkit/RefusalPanel";
 import { StatusPill } from "@/components/toolkit/StatusPill";
 import { post } from "@/lib/client";
@@ -39,6 +40,9 @@ export function Scada() {
   const [setpoint, setSetpoint] = useState({ target: "cook", value: 88 });
   const [fault, setFault] = useState({ fault_id: "cook_undertemp", magnitude: 0.6 });
   const [orderId, setOrderId] = useState("");
+  const [plannedL, setPlannedL] = useState(1000);
+
+  const recipe = model.data?.recipe;
 
   async function run(fn: () => Promise<unknown>, label: string, retryable?: () => Promise<void>) {
     setBusy(true);
@@ -63,19 +67,30 @@ export function Scada() {
     await orders.refetch();
   }
 
-  const recipe = model.data?.recipe;
+  async function looseBatch() {
+    await post("/batches", {
+      recipe_id: recipe?.recipe_id ?? "chocolate-vla-1L",
+      planned_L: plannedL,
+    });
+  }
 
   return (
     <main className="mx-auto flex max-w-4xl flex-col gap-3 p-2 pb-16 sm:gap-4 sm:p-4">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <span className="eyebrow">SCADA-console &middot; scherm 4</span>
-          <h1 className="text-lg font-semibold tracking-[-0.015em]">Bediening</h1>
-        </div>
-        <span className="text-[0.8125rem] text-ink-muted">
-          Operator <span className="mono">{OPERATOR}</span>
-        </span>
-      </header>
+      <ScreenHeader
+        eyebrow="SCADA-console"
+        title="Bediening"
+        subtitle={
+          <>
+            Operator <span className="mono">{OPERATOR}</span>
+          </>
+        }
+        actions={[
+          { href: "/line", label: "Lijn L1", title: "Live procesbeeld" },
+          { href: "/orders", label: "Orders" },
+          { href: "/batches", label: "Batches" },
+          { href: "/equipment", label: "CIP" },
+        ]}
+      />
 
       {refusal && (
         <RefusalPanel
@@ -209,6 +224,53 @@ export function Scada() {
             Wordt na een geslaagde CIP automatisch opnieuw geprobeerd.
           </span>
         </div>
+        <p className="text-[0.6875rem] text-ink-faint">
+          Nog geen order? <CrossLink href="/orders">Maak er een aan</CrossLink>. Zonder order telt
+          een batch niet mee voor OTIF en planrealisatie.
+        </p>
+      </section>
+
+      {/* Losse batch: buiten elke order om. Bestond in de oude applicatie en is
+          nodig om te proefdraaien of een storing na te spelen zonder de
+          orderadministratie te vervuilen. */}
+      <section className="tile flex flex-col gap-3">
+        <span className="eyebrow">Losse batch, zonder order</span>
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="flex flex-col gap-1 text-[0.8125rem]">
+            Recept
+            <input
+              readOnly
+              value={recipe?.recipe_id ?? "chocolate-vla-1L"}
+              className="border border-line-strong bg-surface-sunken px-2 py-1.5 mono"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-[0.8125rem]">
+            Volume
+            <span className="flex items-center gap-1.5">
+              <input
+                type="number"
+                min={100}
+                step={100}
+                value={plannedL}
+                onChange={(e) => setPlannedL(Number(e.target.value))}
+                className="w-24 border border-line-strong bg-surface px-2 py-1.5 text-right num"
+              />
+              <span className="text-ink-muted">L</span>
+            </span>
+          </label>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => run(looseBatch, "losse batch", looseBatch)}
+            className="border border-line-strong px-3 py-1.5 text-[0.8125rem] font-semibold hover:border-ink-muted disabled:opacity-40"
+          >
+            Batch aanmaken
+          </button>
+        </div>
+        <p className="text-[0.6875rem] text-ink-faint">
+          Telt niet mee voor OTIF: er is geen leverdatum om tegen af te zetten. Gebruik dit om te
+          proefdraaien, niet om te produceren.
+        </p>
       </section>
 
       {/* Scherm 7 als blok, niet als route. */}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
+import { CrossLink, ScreenHeader } from "@/components/nav/ScreenHeader";
 import { useBatches, useEquipmentHealth } from "@/lib/queries";
 import { shortDateTime } from "@/lib/format";
 
@@ -62,10 +63,17 @@ export function ReportCentre() {
 
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-4 p-3 pb-16 sm:gap-5 sm:p-6">
-      <header className="border-b border-line-strong pb-4">
-        <span className="eyebrow">Report centre &middot; scherm 10</span>
-        <h1 className="text-[1.375rem] font-semibold tracking-[-0.015em]">Rapporten</h1>
-      </header>
+      <ScreenHeader
+        eyebrow="Report centre"
+        title="Rapporten"
+        subtitle="Per periode, per batch of per procesdeel. Zelfde endpoint als het scherm."
+        actions={[
+          { href: "/management", label: "Management", title: "De KPI's achter het periodrapport" },
+          { href: "/batches", label: "Batches" },
+          { href: "/equipment", label: "Equipment" },
+          { href: "/analyse", label: "Analyse" },
+        ]}
+      />
 
       <section className="tile flex flex-col gap-4">
         <fieldset className="flex flex-col gap-2">
@@ -163,6 +171,14 @@ export function ReportCentre() {
           </a>
           {!href && (
             <span className="text-[0.8125rem] text-ink-muted">Kies eerst een dimensie.</span>
+          )}
+          {/* Terug naar waar de dimensie vandaan komt: kiezen in een dropdown
+              zegt niets over de staat van die batch of dat procesdeel. */}
+          {type === "batch" && dimension && (
+            <CrossLink href={`/batches?batch=${dimension}`}>batch bekijken</CrossLink>
+          )}
+          {type === "equipment" && dimension && (
+            <CrossLink href="/equipment">procesdeel bekijken</CrossLink>
           )}
         </div>
       </section>

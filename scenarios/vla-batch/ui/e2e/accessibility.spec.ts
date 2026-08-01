@@ -53,6 +53,15 @@ async function settle(page: Page) {
   });
 }
 
+/**
+ * Alles met [data-volatile] wordt afgedekt. Nu is dat de "bijgewerkt HH:MM"
+ * -klok op het managementoverzicht: die verandert per seconde en liet drie
+ * snapshots afwisselend slagen en falen zonder dat er iets aan het ontwerp
+ * veranderde. Een test die om de haverklap flapt, wordt genegeerd, en dan
+ * bewaakt hij niets meer.
+ */
+const MASK = (page: Page) => [page.locator("[data-volatile]")];
+
 test.describe("grijswaarden", () => {
   for (const s of SCREENS) {
     test(`${s.name} blijft leesbaar zonder kleur`, async ({ page }) => {
@@ -62,6 +71,7 @@ test.describe("grijswaarden", () => {
       await expect(page).toHaveScreenshot(`grijs-${s.name}.png`, {
         fullPage: true,
         maxDiffPixelRatio: 0.02,
+        mask: MASK(page),
       });
     });
   }
@@ -80,6 +90,7 @@ test.describe("kleurenblindheid", () => {
         await expect(page).toHaveScreenshot(`${cvd}-${s.name}.png`, {
           fullPage: true,
           maxDiffPixelRatio: 0.02,
+          mask: MASK(page),
         });
       });
     }

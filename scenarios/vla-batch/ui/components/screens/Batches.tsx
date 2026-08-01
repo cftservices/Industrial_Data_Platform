@@ -1,11 +1,17 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { NextStep } from "@/components/nav/NextStep";
+import { CrossLink, ScreenHeader } from "@/components/nav/ScreenHeader";
 import { DeviationBand } from "@/components/toolkit/Indicators";
+import { RefusalPanel } from "@/components/toolkit/RefusalPanel";
 import { StatusPill, type Status } from "@/components/toolkit/StatusPill";
+import { post } from "@/lib/client";
 import { EMPTY, num, shortDateTime, value as fmt } from "@/lib/format";
 import { useBatch, useBatches, useUiModel } from "@/lib/queries";
+import type { Refusal } from "@/lib/refusal";
 
 /**
  * Scherm 2, batches (lijst plus detail), met scherm 3 (recept) als uitklapblok.
@@ -19,11 +25,15 @@ import { useBatch, useBatches, useUiModel } from "@/lib/queries";
  * detailpaneel onder de gebruiker weg zodra de lijst ververst.
  */
 
+type VerdictAck = { operator_id: string | null; ts: string };
+
 type Batch = {
   batch_id: string;
   state: string;
   verdict: string | null;
+  verdict_ack?: VerdictAck | null;
   recipe_id: string;
+  order_id?: string | null;
   planned_L: number | null;
   packs_total: number | null;
   end_viscosity_cP: number | null;
@@ -59,16 +69,22 @@ function stateStatus(s: string): Status {
   return s === "COMPLETE" ? "done" : s === "IDLE" ? "idle" : "run";
 }
 
+const OPERATOR = "op-01";
+
 export function Batches() {
   const params = useSearchParams();
   const router = useRouter();
   const selected = params.get("batch");
   const verdictFilter = params.get("verdict");
+  const orderFilter = params.get("order");
 
   // De lijst pollt niet zolang er een detail open staat.
   const list = useBatches<Batch[]>(Boolean(selected));
   const detail = useBatch<BatchDetail>(selected);
   const model = useUiModel();
+
+  const [refusal, setRefusal] = useState<Refusal | null>(null);
+  const [busy, setBusy] = useState(false);
 
   function open(id: string | null) {
     const next = new URLSearchParams(params.toString());
@@ -77,33 +93,73 @@ export function Batches() {
     router.replace(next.toString() ? `?${next.toString()}` : "?", { scroll: false });
   }
 
-  const rows = (list.data ?? []).filter((b) => !verdictFilter || b.verdict === verdictFilter);
+  /**
+   * De handtekening onder het verdict. Idempotent aan de engine-kant, dus een
+   * dubbele klik doet geen kwaad; de knop verdwijnt zodra de ack er staat.
+   */
+  async function ackVerdict(batchId: string) {
+    setBusy(true);
+    setRefusal(null);
+    try {
+      await post(`/batches/${batchId}/ack-verdict`, { operator_id: OPERATOR });
+      await Promise.all([detail.refetch(), list.refetch()]);
+    } catch (err) {
+      setRefusal(err as Refusal);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const rows = (list.data ?? [])
+    .filter((b) => !verdictFilter || b.verdict === verdictFilter)
+    .filter((b) => !orderFilter || b.order_id === orderFilter);
   const spec = model.data?.recipe?.viscosity_spec_cP ?? null;
+  const unsigned = (list.data ?? []).filter(
+    (b) => b.state === "COMPLETE" && b.verdict && !b.verdict_ack,
+  );
 
   return (
     <main className="mx-auto flex max-w-[1440px] flex-col gap-4 p-3 pb-16 sm:gap-5 sm:p-6">
-      <header className="flex flex-wrap items-end justify-between gap-4 border-b border-line-strong pb-4">
-        <div>
-          <span className="eyebrow">Batches &middot; scherm 2</span>
-          <h1 className="text-[1.375rem] font-semibold tracking-[-0.015em]">Batchoverzicht</h1>
-        </div>
-        {verdictFilter && (
-          <span className="flex items-center gap-2 text-[0.8125rem]">
-            gefilterd op
+      <ScreenHeader
+        eyebrow="Batches"
+        title="Batchoverzicht"
+        subtitle={
+          unsigned.length > 0
+            ? `${unsigned.length} ${unsigned.length === 1 ? "batch wacht" : "batches wachten"} op een handtekening onder het verdict.`
+            : "Verloop, doseringen en verdict per batch."
+        }
+        actions={[
+          { href: "/orders", label: "Orders", title: "Order aanmaken of sluiten" },
+          { href: "/shopfloor", label: "Werkvloer" },
+          { href: "/reports?type=batch", label: "Batchrapport" },
+        ]}
+      />
+
+      {(verdictFilter || orderFilter) && (
+        <p className="flex flex-wrap items-center gap-2 text-[0.8125rem]">
+          gefilterd op
+          {verdictFilter && (
             <StatusPill status={verdictStatus(verdictFilter)}>{verdictFilter}</StatusPill>
-            <Link href="/batches" className="text-accent underline underline-offset-2">
-              alles tonen
-            </Link>
-          </span>
-        )}
-      </header>
+          )}
+          {orderFilter && (
+            <CrossLink href={`/orders?order=${orderFilter}`}>order {orderFilter}</CrossLink>
+          )}
+          <Link href="/batches" className="text-accent underline underline-offset-2">
+            alles tonen
+          </Link>
+        </p>
+      )}
+
+      {refusal && (
+        <RefusalPanel refusal={refusal} operatorId={OPERATOR} onCleared={() => setRefusal(null)} />
+      )}
 
       <div className="grid items-start gap-5 lg:[grid-template-columns:minmax(0,1.4fr)_minmax(0,1fr)]">
         <section className="tile table-scroll p-0">
           <table className="w-full border-collapse text-[0.8125rem]">
             <thead>
               <tr className="border-b border-line text-left">
-                {["Batch", "Status", "Verdict", "Pakken", "Viscositeit", "Afgerond"].map((h) => (
+                {["Batch", "Order", "Status", "Verdict", "Pakken", "Viscositeit", "Afgerond"].map((h) => (
                   <th key={h} className="px-3 py-2 text-[0.6875rem] font-semibold tracking-[0.06em] uppercase text-ink-faint">
                     {h}
                   </th>
@@ -113,27 +169,48 @@ export function Batches() {
             <tbody>
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-4 text-ink-muted">
-                    Geen batches in deze selectie.
+                  <td colSpan={7} className="px-3 py-4 text-ink-muted">
+                    Geen batches in deze selectie.{" "}
+                    <CrossLink href="/orders">Maak een order en start een batch</CrossLink>.
                   </td>
                 </tr>
               )}
               {rows.map((b) => (
                 <tr
                   key={b.batch_id}
+                  // Onderscheidt een echte batchrij van de lege-staat-rij. Die
+                  // laatste is ook een <tr> en werd daardoor voor een batch
+                  // aangezien, inclusief de doorklik die erin staat.
+                  data-row="batch"
                   onClick={() => open(b.batch_id)}
                   className={`cursor-pointer border-b border-line last:border-b-0 hover:bg-surface-sunken ${
                     selected === b.batch_id ? "bg-surface-sunken" : ""
                   }`}
                 >
                   <td className="px-3 py-[var(--density-row)] mono">{b.batch_id}</td>
+                  <td className="px-3 py-[var(--density-row)] mono">
+                    {b.order_id ? (
+                      // De doorklik mag het detailpaneel niet ook openen.
+                      <span onClick={(e) => e.stopPropagation()}>
+                        <CrossLink href={`/orders?order=${b.order_id}`}>{b.order_id}</CrossLink>
+                      </span>
+                    ) : (
+                      <span className="text-ink-faint">{EMPTY}</span>
+                    )}
+                  </td>
                   <td className="px-3 py-[var(--density-row)]">
                     <StatusPill status={stateStatus(b.state)}>{b.state}</StatusPill>
                   </td>
                   <td className="px-3 py-[var(--density-row)]">
-                    <StatusPill status={verdictStatus(b.verdict)}>
-                      {b.verdict ?? "PENDING"}
-                    </StatusPill>
+                    <span className="flex items-center gap-1.5">
+                      <StatusPill status={verdictStatus(b.verdict)}>
+                        {b.verdict ?? "PENDING"}
+                      </StatusPill>
+                      {/* Ondertekend of niet: dat is een audit-feit, geen kleur. */}
+                      {b.verdict && !b.verdict_ack && (
+                        <span className="text-[0.6875rem] text-ink-faint">niet getekend</span>
+                      )}
+                    </span>
                   </td>
                   <td className="px-3 py-[var(--density-row)] num">
                     {b.packs_total === null ? EMPTY : num(b.packs_total, 0)}
@@ -241,12 +318,61 @@ export function Batches() {
                   </dl>
                 </details>
 
-                <Link
-                  href={`/report/${selected}`}
-                  className="self-start border border-line-strong px-3 py-1.5 text-[0.8125rem] font-semibold hover:border-ink-muted"
-                >
-                  Batchrapport
-                </Link>
+                {/* Het verdict ondertekenen. Zonder deze knop was het EBR een
+                    rapport zonder handtekening: het bewijsstuk noemt een
+                    beoordeling die niemand heeft bevestigd. */}
+                <div className="flex flex-col gap-2 border-t border-line pt-3">
+                  <span className="eyebrow">Verdict</span>
+                  {detail.data.verdict === null ? (
+                    <p className="text-[0.8125rem] text-ink-muted">
+                      Nog geen verdict. Dat komt bij het afronden van de batch.
+                    </p>
+                  ) : detail.data.verdict_ack ? (
+                    <p className="text-[0.8125rem] text-ink-muted">
+                      Ondertekend door{" "}
+                      <span className="mono">{detail.data.verdict_ack.operator_id ?? "onbekend"}</span>{" "}
+                      op <span className="num">{shortDateTime(detail.data.verdict_ack.ts)}</span>.
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-[0.8125rem] text-ink-muted">
+                        Verdict <StatusPill status={verdictStatus(detail.data.verdict)}>
+                          {detail.data.verdict}
+                        </StatusPill>{" "}
+                        wacht op een handtekening.
+                      </p>
+                      <button
+                        type="button"
+                        disabled={busy || detail.data.state !== "COMPLETE"}
+                        onClick={() => ackVerdict(detail.data!.batch_id)}
+                        className="self-start border border-line-strong px-3 py-1.5 text-[0.8125rem] font-semibold hover:border-ink-muted disabled:opacity-40"
+                      >
+                        Ondertekenen als {OPERATOR}
+                      </button>
+                      {detail.data.state !== "COMPLETE" && (
+                        <span className="text-[0.6875rem] text-ink-faint">
+                          Kan pas als de batch COMPLETE is.
+                        </span>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3">
+                  <Link
+                    href={`/report/${selected}`}
+                    className="border border-line-strong px-3 py-1.5 text-[0.8125rem] font-semibold hover:border-ink-muted"
+                  >
+                    Batchrapport
+                  </Link>
+                  <CrossLink href={`/reports?type=batch&dimension=${selected}`}>EBR als PDF</CrossLink>
+                  {detail.data.order_id && (
+                    <CrossLink href={`/orders?order=${detail.data.order_id}`}>
+                      order {detail.data.order_id}
+                    </CrossLink>
+                  )}
+                  <CrossLink href={`/shopfloor?code=${selected}`}>op de werkvloer openen</CrossLink>
+                </div>
               </>
             ) : (
               <p className="text-[0.8125rem] text-ink-muted">Batch niet gevonden.</p>
@@ -254,6 +380,26 @@ export function Batches() {
           </aside>
         )}
       </div>
+
+      <NextStep
+        steps={[
+          {
+            href: "/shopfloor",
+            label: "Verpakken en verzenden",
+            why: "Een goedgekeurde batch mag op de pallet.",
+          },
+          {
+            href: "/orders",
+            label: "Order sluiten",
+            why: "Als alle batches van de order af zijn.",
+          },
+          {
+            href: "/equipment",
+            label: "CIP na de batch",
+            why: "Na een aantal batches weigert de lijn zonder reiniging.",
+          },
+        ]}
+      />
     </main>
   );
 }

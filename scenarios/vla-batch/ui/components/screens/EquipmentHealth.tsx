@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { NextStep } from "@/components/nav/NextStep";
+import { CrossLink, ScreenHeader } from "@/components/nav/ScreenHeader";
 import { Sparkline } from "@/components/toolkit/Indicators";
 import { StatusPill, type Status } from "@/components/toolkit/StatusPill";
 import { post } from "@/lib/client";
@@ -88,17 +90,22 @@ export function EquipmentHealth() {
 
   return (
     <main className="mx-auto flex max-w-[1440px] flex-col gap-4 p-3 pb-16 sm:gap-5 sm:p-6">
-      <header className="flex flex-wrap items-end justify-between gap-4 border-b border-line-strong pb-4">
-        <div>
-          <span className="eyebrow">Equipment health &middot; scherm 8, incl. OEE</span>
-          <h1 className="text-[1.375rem] font-semibold tracking-[-0.015em]">Procesdelen</h1>
-        </div>
+      <ScreenHeader
+        eyebrow="Equipment health, inclusief OEE"
+        title="Procesdelen"
+        subtitle="Reinigen (CIP), draaiuren, opwarmtrend en beschikbaarheid per procesdeel."
+        actions={[
+          { href: "/alarms", label: "Alarmen", title: "Meldingen van deze procesdelen" },
+          { href: "/reports?type=equipment", label: "Onderhoudsrapport" },
+          { href: "/line", label: "Lijn L1" },
+        ]}
+      >
         {oeeTarget !== null && (
           <span className="text-[0.8125rem] text-ink-muted num">
             OEE-norm {num(oeeTarget * 100, 0)} %
           </span>
         )}
-      </header>
+      </ScreenHeader>
 
       {refusal && (
         <section className="tile flex flex-col items-start gap-2 border-l-[3px] border-l-status-alarm">
@@ -136,7 +143,14 @@ export function EquipmentHealth() {
 
               return (
                 <tr key={e.equipment_id} className="border-b border-line last:border-b-0">
-                  <td className="px-3 py-[var(--density-row)] mono">{e.equipment_id}</td>
+                  <td className="px-3 py-[var(--density-row)] mono">
+                    <CrossLink
+                      href={`/reports?type=equipment&dimension=${e.equipment_id}`}
+                      title="Onderhoudsrapport van dit procesdeel"
+                    >
+                      {e.equipment_id}
+                    </CrossLink>
+                  </td>
                   <td className="px-3 py-[var(--density-row)]">
                     <StatusPill status={eqStatus(e)}>{e.state}</StatusPill>
                   </td>
@@ -185,14 +199,23 @@ export function EquipmentHealth() {
                     )}
                   </td>
                   <td className="px-3 py-[var(--density-row)] text-right">
-                    <button
-                      type="button"
-                      disabled={busy === e.equipment_id}
-                      onClick={() => cip(e.equipment_id)}
-                      className="border border-line-strong px-2 py-1 text-[0.6875rem] font-semibold tracking-[0.04em] uppercase text-ink-muted hover:border-ink-muted hover:text-ink disabled:opacity-40"
-                    >
-                      CIP
-                    </button>
+                    <span className="flex items-center justify-end gap-1.5">
+                      <Link
+                        href={`/alarms?equipment=${e.equipment_id}`}
+                        title="Meldingen van dit procesdeel"
+                        className="border border-line-strong px-2 py-1 text-[0.6875rem] font-semibold tracking-[0.04em] uppercase text-ink-muted hover:border-ink-muted hover:text-ink"
+                      >
+                        Meldingen
+                      </Link>
+                      <button
+                        type="button"
+                        disabled={busy === e.equipment_id}
+                        onClick={() => cip(e.equipment_id)}
+                        className="border border-line-strong px-2 py-1 text-[0.6875rem] font-semibold tracking-[0.04em] uppercase text-ink-muted hover:border-ink-muted hover:text-ink disabled:opacity-40"
+                      >
+                        CIP
+                      </button>
+                    </span>
                   </td>
                 </tr>
               );
@@ -226,6 +249,26 @@ export function EquipmentHealth() {
         procesdelen is performance vastgezet en is quality lijnbreed, dus die rijen verschillen
         uitsluitend in beschikbaarheid. Een OEE-ranglijst zou een verschil suggereren dat er niet is.
       </p>
+
+      <NextStep
+        steps={[
+          {
+            href: "/scada",
+            label: "Batch aanmaken na de CIP",
+            why: "Een gereinigd procesdeel accepteert weer een batch.",
+          },
+          {
+            href: "/management",
+            label: "Wat kost deze stilstand",
+            why: "Het verliesblok zet de uren om in geld.",
+          },
+          {
+            href: "/reports?type=period&days=30",
+            label: "Periodrapport, 30 dagen",
+            why: "Draaiuren en meldingen over de maand.",
+          },
+        ]}
+      />
     </main>
   );
 }

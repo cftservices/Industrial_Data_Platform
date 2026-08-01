@@ -41,6 +41,9 @@ export const keys = {
   orders: ["orders"] as const,
   order: (id: string) => ["order", id] as const,
   inventory: ["inventory"] as const,
+  materials: ["materials"] as const,
+  samples: (batchId: string) => ["samples", batchId] as const,
+  hu: (batchId: string) => ["hu", batchId] as const,
   equipment: ["equipment", "health"] as const,
   oee: ["oee"] as const,
   alarms: (filter: string) => ["alarms", filter] as const,
@@ -146,4 +149,33 @@ export function useOee<T = unknown[]>(extra?: Extra<T>) {
 
 export function useInventory<T = Record<string, unknown>>(extra?: Extra<T>) {
   return usePolled<T>(keys.inventory, "/inventory", POLL.aggregates, extra);
+}
+
+/** Materialenmaster. Levert de uom en de bestelgrens die /inventory niet per rij geeft. */
+export function useMaterials<T = unknown[]>(extra?: Extra<T>) {
+  return usePolled<T>(keys.materials, "/materials", POLL.aggregates, extra);
+}
+
+/* ------------------------------------------------- werkvloer: monsters en HU */
+
+/**
+ * Beide pollen alleen met een batch in beeld. Zonder `enabled` zou de
+ * werkvloerroute twee lege lijsten blijven ophalen zolang er niet gescand is.
+ */
+export function useSamples<T = unknown[]>(batchId: string | null, extra?: Extra<T>) {
+  return usePolled<T>(
+    keys.samples(batchId ?? "geen"),
+    `/samples?batch_id=${encodeURIComponent(batchId ?? "")}`,
+    POLL.lists,
+    { enabled: Boolean(batchId), ...extra },
+  );
+}
+
+export function useHandlingUnits<T = unknown[]>(batchId: string | null, extra?: Extra<T>) {
+  return usePolled<T>(
+    keys.hu(batchId ?? "geen"),
+    `/hu?batch_id=${encodeURIComponent(batchId ?? "")}`,
+    POLL.lists,
+    { enabled: Boolean(batchId), ...extra },
+  );
 }

@@ -56,7 +56,10 @@ test("een geopend batchdetail bevriest de lijst-loop", async ({ page }) => {
   await page.goto("/batches");
   await page.waitForLoadState("networkidle").catch(() => {});
 
-  const rows = page.locator("tbody tr");
+  // Alleen echte batchrijen. De lege-staat-regel is ook een <tr> en telde
+  // daardoor mee, waardoor deze test met een lege database niet oversloeg maar
+  // op die regel klikte.
+  const rows = page.locator('tbody tr[data-row="batch"]');
   if ((await rows.count()) === 0) test.skip(true, "geen batches in de testdatabase");
 
   await rows.first().click();

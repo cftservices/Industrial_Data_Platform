@@ -295,8 +295,13 @@ class EquipmentMonitor:
     def _running_and_down_seconds(self, equipment_id: str) -> tuple[float, float]:
         """Same interval technique as `running_hours`: walk the state-history
         rows and accumulate the [ts_i, ts_i+1) duration into running_sec
-        (state == Running) or down_sec (any other state EXCEPT Idle/Allocated,
-        which are neutral and excluded from both buckets)."""
+        (productive) or down_sec (real downtime). Idle/Allocated are neutral and
+        excluded from both buckets.
+
+        The classification comes from model.py, NOT from a local tuple. Dirty
+        used to land in down_sec here while kpi.py counted it as productive, so
+        /oee reported 0 % availability for the same cook unit that /kpi/summary
+        called 100 % utilized. Both endpoints now read one definition."""
         rows = self._history(equipment_id)
         running_sec = 0.0
         down_sec = 0.0
@@ -306,12 +311,13 @@ class EquipmentMonitor:
                 else datetime.now(timezone.utc)
             dur = max(0.0, (end - start).total_seconds())
             state = row.get("state")
-            if state == "Running":
+            if state in M.PRODUCTIVE_STATES:
                 running_sec += dur
-            elif state in ("Idle", "Allocated"):
+            elif state in M.NEUTRAL_STATES:
                 continue
             else:
-                # Down / Error / Dirty (and any other non-neutral state)
+                # Down / Error, plus any unknown state: unknown counts as
+                # downtime so a new state cannot silently inflate availability.
                 down_sec += dur
         return running_sec, down_sec
 

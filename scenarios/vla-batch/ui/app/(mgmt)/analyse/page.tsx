@@ -14,6 +14,8 @@
  * Het iframe laadt same-origin op /grafana/, achter dezelfde auth-middleware.
  * Zie de deploystap: anonymous access zou de historian publiek queryable maken.
  */
+import Link from "next/link";
+
 const GRAFANA_PATH = process.env.NEXT_PUBLIC_GRAFANA_PATH ?? "/grafana/d/vla-line?kiosk";
 
 export const metadata = { title: "Analyse, DairyWorks Vla" };
@@ -21,13 +23,30 @@ export const metadata = { title: "Analyse, DairyWorks Vla" };
 export default function AnalysePage() {
   return (
     <main className="mx-auto flex max-w-[1440px] flex-col gap-4 p-6 pb-16">
-      <header className="border-b border-line-strong pb-4">
-        <span className="eyebrow">Ad-hoc analyse &middot; scherm 5</span>
-        <h1 className="text-[1.375rem] font-semibold tracking-[-0.015em]">Tijdreeksen</h1>
-        <p className="mt-1 max-w-2xl text-[0.8125rem] text-ink-muted">
-          Exploratie in Grafana, met de tijdpicker en de variabelen die uw team al kent. De
-          beslissingsschermen tekenen zelf, zodat een getal maar op een plek wordt berekend.
-        </p>
+      <header className="flex flex-wrap items-end justify-between gap-3 border-b border-line-strong pb-4">
+        <div>
+          <span className="eyebrow">Ad-hoc analyse</span>
+          <h1 className="text-[1.375rem] font-semibold tracking-[-0.015em]">Tijdreeksen</h1>
+          <p className="mt-1 max-w-2xl text-[0.8125rem] text-ink-muted">
+            Exploratie in Grafana, met de tijdpicker en de variabelen die uw team al kent. De
+            beslissingsschermen tekenen zelf, zodat een getal maar op een plek wordt berekend.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { href: "/management", label: "Management" },
+            { href: "/reports", label: "Rapporten" },
+            { href: "/line", label: "Lijn L1" },
+          ].map((a) => (
+            <Link
+              key={a.href}
+              href={a.href}
+              className="border border-line-strong px-3 py-1.5 text-[0.8125rem] font-semibold whitespace-nowrap hover:border-ink-muted"
+            >
+              {a.label}
+            </Link>
+          ))}
+        </div>
       </header>
 
       <section className="flex flex-col gap-2">

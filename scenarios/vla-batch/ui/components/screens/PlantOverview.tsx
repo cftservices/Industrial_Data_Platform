@@ -114,26 +114,44 @@ export function PlantOverview() {
           <span className="text-[0.8125rem] text-ink-muted">
             {batch ? (
               <>
-                Batch <span className="mono">{batch.batch_id}</span> &middot; {batch.state}
+                Batch{" "}
+                <Link
+                  href={`/batches?batch=${batch.batch_id}`}
+                  className="mono font-semibold text-accent underline underline-offset-2 hover:text-ink"
+                >
+                  {batch.batch_id}
+                </Link>{" "}
+                &middot; {batch.state}
               </>
             ) : (
-              "Geen actieve batch"
+              <>
+                Geen actieve batch,{" "}
+                <Link
+                  href="/scada"
+                  className="font-semibold text-accent underline underline-offset-2 hover:text-ink"
+                >
+                  start er een
+                </Link>
+              </>
             )}
           </span>
         </div>
-        <div className="flex gap-2 text-[0.8125rem]">
-          <Link
-            href={sales ? "/" : "/?view=sales"}
-            className="border border-line-strong px-3 py-1.5 font-semibold hover:border-ink-muted"
-          >
-            {sales ? "Naar plant overview" : "Sales-weergave"}
-          </Link>
-          <Link
-            href="/management"
-            className="border border-line-strong px-3 py-1.5 font-semibold hover:border-ink-muted"
-          >
-            Management
-          </Link>
+        <div className="flex flex-wrap gap-2 text-[0.8125rem]">
+          {[
+            { href: sales ? "/" : "/?view=sales", label: sales ? "Plant overview" : "Sales-weergave" },
+            { href: "/management", label: "Management" },
+            { href: "/line", label: "Lijn L1" },
+            { href: "/orders", label: "Orders" },
+            { href: "/shopfloor", label: "Werkvloer" },
+          ].map((a) => (
+            <Link
+              key={a.href}
+              href={a.href}
+              className="border border-line-strong px-3 py-1.5 font-semibold whitespace-nowrap hover:border-ink-muted"
+            >
+              {a.label}
+            </Link>
+          ))}
         </div>
       </header>
 
@@ -188,7 +206,16 @@ export function PlantOverview() {
             <h2 className="text-base font-semibold">Orders</h2>
           </div>
           {openOrders.length === 0 ? (
-            <p className="text-[0.8125rem] text-ink-muted">Geen openstaande orders.</p>
+            <p className="text-[0.8125rem] text-ink-muted">
+              Geen openstaande orders.{" "}
+              <Link
+                href="/orders"
+                className="font-semibold text-accent underline underline-offset-2"
+              >
+                Maak er een aan
+              </Link>
+              .
+            </p>
           ) : (
             <ul className="m-0 list-none p-0">
               {openOrders.map((o) => (
@@ -196,7 +223,14 @@ export function PlantOverview() {
                   key={o.order_id}
                   className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b border-line py-[var(--density-row)] last:border-b-0 sm:grid-cols-[7rem_1fr_5rem]"
                 >
-                  <span className="mono">{o.order_id}</span>
+                  <span className="mono">
+                    <Link
+                      href={`/orders?order=${o.order_id}`}
+                      className="font-semibold text-accent underline underline-offset-2 hover:text-ink"
+                    >
+                      {o.order_id}
+                    </Link>
+                  </span>
                   <span className="h-1.5 bg-surface-sunken">
                     <i
                       className="block h-full bg-ink-muted"
@@ -220,7 +254,15 @@ export function PlantOverview() {
           <ul className="m-0 flex list-none flex-col gap-1 p-0">
             {(equipment.data ?? []).map((e) => (
               <li key={e.equipment_id} className="flex items-center justify-between gap-3">
-                <span className="mono">{e.equipment_id}</span>
+                <span className="mono">
+                  <Link
+                    href={`/equipment`}
+                    title={`${e.equipment_id}: CIP, draaiuren, OEE`}
+                    className="font-semibold text-accent underline underline-offset-2 hover:text-ink"
+                  >
+                    {e.equipment_id}
+                  </Link>
+                </span>
                 <span className="flex items-center gap-3">
                   {e.batches_since_cip !== undefined && (
                     <span className="text-[0.6875rem] text-ink-faint num">

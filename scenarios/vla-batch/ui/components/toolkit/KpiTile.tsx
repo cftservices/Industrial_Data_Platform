@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { BulletGraph } from "./BulletGraph";
 import { StatusPill, statusFromKpi } from "./StatusPill";
 import { EMPTY, value as fmtValue } from "@/lib/format";
@@ -17,6 +18,23 @@ import type { KpiValue } from "@/lib/types";
  * Alleen tegels die aandacht vragen krijgen kleur. Een OK-tegel blijft neutraal
  * met een klein vinkje; kleur is een signaal en geen decoratie.
  */
+
+/**
+ * Waar een KPI naartoe doorklikt: naar de gegevens waaruit hij is gerekend,
+ * niet naar een tweede weergave van hetzelfde getal. Een tegel die een probleem
+ * meldt en je daarna laat zoeken waar het vandaan komt, is een half signaal.
+ */
+const SOURCE: Record<string, { href: string; label: string }> = {
+  throughput_rate: { href: "/line", label: "naar de lijn" },
+  quality_ratio: { href: "/batches", label: "naar de batches" },
+  scrap_ratio: { href: "/batches?verdict=REJECTED", label: "naar de afkeur" },
+  utilization_efficiency: { href: "/equipment", label: "naar de procesdelen" },
+  plan_attainment_pct: { href: "/orders", label: "naar de orders" },
+  mass_yield_pct: { href: "/voorraad", label: "naar verbruik en productie" },
+  capability_cpk: { href: "/analyse", label: "naar de spreiding" },
+  otif_pct: { href: "/orders", label: "naar de leverdata" },
+  oee: { href: "/equipment", label: "naar de procesdelen" },
+};
 
 function Delta({ kpi }: { kpi: KpiValue }) {
   if (kpi.delta === null) {
@@ -43,6 +61,7 @@ function Delta({ kpi }: { kpi: KpiValue }) {
 
 export function KpiTile({ kpi }: { kpi: KpiValue }) {
   const [open, setOpen] = useState(false);
+  const source = SOURCE[kpi.kpi_id];
   const status = statusFromKpi(kpi.status);
   const tone = status === "alarm" ? "alarm" : status === "warn" ? "warn" : "neutral";
 
@@ -96,6 +115,17 @@ export function KpiTile({ kpi }: { kpi: KpiValue }) {
         <StatusPill status={status} />
         <Delta kpi={kpi} />
       </div>
+
+      {/* De doorklik staat NAAST de info-knop, niet eroverheen: de definitie
+          opvragen en de bron opzoeken zijn twee verschillende vragen. */}
+      {source && (
+        <Link
+          href={source.href}
+          className="self-start text-[0.6875rem] font-semibold text-accent underline underline-offset-2 hover:text-ink"
+        >
+          {source.label}
+        </Link>
+      )}
 
       {/* UNSET toont altijd de reden. Een tegel zonder getal moet uitleggen
           waarom, anders leest het als een storing. */}

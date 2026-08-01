@@ -38,6 +38,34 @@ IDLE, DOSING, COOKING, COOLING, FILLING, COMPLETE = (
 )
 BATCH_STATES = [IDLE, DOSING, COOKING, COOLING, FILLING, COMPLETE]
 
+# ---------------------------------------------------------------------------
+# Equipment-state classification — THE single source of truth.
+#
+# Dirty is GEEN stilstand. Een vervuilde kookketel kookt gewoon door; hij warmt
+# alleen trager op, en de batch komt er af. Volgens het ISO 22400-tijdmodel is
+# dat waarde-toevoegende tijd en hoort het in APT.
+#
+# Hem als stilstand tellen straft bovendien dubbel: de vervuiling verlaagt al de
+# performance via de opwarmtrend, en dezelfde tijd zou daarnaast als
+# onbeschikbaar meetellen. Dat is precies de dubbeltelling die het verliesblok
+# elders verbiedt. In productie leverde het een benuttingsgraad van 0,68 procent
+# op voor een lijn die de hele week batches maakte: geen meting maar een
+# artefact.
+#
+# These live HERE and not in kpi.py because /oee (equipment.py) and
+# /kpi/summary (kpi.py) both classify the same state history. When the sets were
+# duplicated, the reclassification landed in kpi.py only and the two endpoints
+# disagreed on screen: 0 % availability next to 100 % utilization for the same
+# cook unit. tests/test_oee_health.py fails if they diverge again.
+#
+# Openstaand en bewust niet meegenomen: de tijd dat de lijn WACHT op een CIP
+# omdat Dirty nieuwe batches blokkeert, is wel echte stilstand. Die is nu niet
+# apart zichtbaar; daarvoor moet de statehistorie onderscheiden of er in dat
+# interval een batch liep.
+DOWNTIME_STATES = {"Down", "Error"}
+PRODUCTIVE_STATES = {"Running", "Dirty"}
+NEUTRAL_STATES = {"Idle", "Allocated"}
+
 # Alarm severities
 CRITICAL, HIGH, MEDIUM, LOW = "Critical", "High", "Medium", "Low"
 

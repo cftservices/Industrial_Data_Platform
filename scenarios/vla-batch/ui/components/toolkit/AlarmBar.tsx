@@ -98,8 +98,21 @@ export function AlarmBar({
               {top.priority === "high" ? "1" : top.priority === "medium" ? "2" : "3"}
             </StatusPill>
             <span className="min-w-0 truncate text-[0.8125rem]">{top.message}</span>
+            {/* De herkomst is een doorklik. Het alarm weet welk procesdeel het
+                betreft; de operator laten zoeken is verspilde tijd op precies
+                het moment dat die er geen heeft. */}
             <span className="mono shrink-0 text-ink-faint">
-              {top.equipment_id ?? "lijn"} &middot; {shortTime(top.ts)}
+              {top.equipment_id ? (
+                <Link
+                  href={`/alarms?equipment=${encodeURIComponent(top.equipment_id)}`}
+                  className="font-semibold underline underline-offset-2 hover:text-ink"
+                >
+                  {top.equipment_id}
+                </Link>
+              ) : (
+                "lijn"
+              )}{" "}
+              &middot; {shortTime(top.ts)}
             </span>
             {onAck && (
               <button

@@ -1,6 +1,8 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
+import { NextStep } from "@/components/nav/NextStep";
+import { CrossLink, ScreenHeader } from "@/components/nav/ScreenHeader";
 import { KpiTile } from "@/components/toolkit/KpiTile";
 import { LossBlock } from "@/components/toolkit/LossBlock";
 import { StatusPill } from "@/components/toolkit/StatusPill";
@@ -35,20 +37,27 @@ export function ManagementOverview() {
   function setWindow(id: string) {
     const next = new URLSearchParams(params.toString());
     next.set("window", id);
-    router.replace(`?${next.toString()}`, { scroll: false });
+    // PUSH en niet replace. De kopnoot hierboven belooft dat de terugknop
+    // werkt (Shneiderman's "history"), en met replace komt er geen
+    // historie-entry: goBack sprong naar about:blank. Filters die een rij
+    // selecteren blijven wel replace, anders vult een demo de historie met
+    // dertig klikken.
+    router.push(`?${next.toString()}`, { scroll: false });
   }
 
   return (
     <main className="mx-auto flex max-w-[1440px] flex-col gap-4 p-3 pb-16 sm:gap-5 sm:p-6">
-      <header className="flex flex-wrap items-end justify-between gap-4 border-b border-line-strong pb-4">
-        <div className="flex flex-col gap-0.5">
-          <span className="eyebrow">Managementoverzicht &middot; scherm 12</span>
-          <h1 className="text-[1.375rem] font-semibold tracking-[-0.015em]">DairyWorks, lijn Vla</h1>
-          <span className="text-[0.8125rem] text-ink-muted">
-            {data ? windowLabel(data.window, data.from) : " "}
-          </span>
-        </div>
-
+      <ScreenHeader
+        eyebrow="Managementoverzicht"
+        title="DairyWorks, lijn Vla"
+        subtitle={data ? windowLabel(data.window, data.from) : " "}
+        actions={[
+          { href: "/", label: "Plant overview", title: "Ligt de dienst op plan" },
+          { href: "/orders", label: "Orders" },
+          { href: "/equipment", label: "Equipment" },
+          { href: "/reports", label: "Rapporten" },
+        ]}
+      >
         <div className="flex flex-wrap items-end gap-5">
           <div className="flex flex-col gap-1.5">
             <span className="eyebrow" id="lbl-window">
@@ -85,13 +94,16 @@ export function ManagementOverview() {
               ) : (
                 <StatusPill status="ok">Live</StatusPill>
               )}
-              <span className="num">
+              {/* data-volatile: een klok verandert per seconde en maakt elke
+                  snapshot-vergelijking kansspel. e2e/accessibility.spec.ts
+                  maskeert alles met dit attribuut. */}
+              <span className="num" data-volatile>
                 {dataUpdatedAt ? `bijgewerkt ${shortTime(new Date(dataUpdatedAt).toISOString())}` : ""}
               </span>
             </span>
           </div>
         </div>
-      </header>
+      </ScreenHeader>
 
       {/* Per-blok foutafhandeling: de KPI-rij en het verliesblok falen los van
           elkaar. Een storing in het ene mag het andere niet leegmaken. */}
@@ -147,16 +159,40 @@ export function ManagementOverview() {
                 Het PDF krijgt exact dezelfde parameters mee, zodat scherm en rapport gegarandeerd
                 hetzelfde getal tonen.
               </p>
-              <a
-                href={`/api/v1/report/period?days=7&format=pdf`}
-                target="_blank"
-                rel="noreferrer"
-                className="self-start rounded-[var(--radius-tile)] border border-line-strong px-3 py-1.5 text-[0.8125rem] font-semibold hover:border-ink-muted"
-              >
-                Periode-rapport (PDF)
-              </a>
+              <div className="flex flex-wrap items-center gap-3">
+                <a
+                  href={`/api/v1/report/period?days=7&format=pdf`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-[var(--radius-tile)] border border-line-strong px-3 py-1.5 text-[0.8125rem] font-semibold hover:border-ink-muted"
+                >
+                  Periode-rapport (PDF)
+                </a>
+                <CrossLink href="/reports">andere rapporten</CrossLink>
+                <CrossLink href="/analyse">zelf analyseren</CrossLink>
+              </div>
             </section>
           </div>
+
+          <NextStep
+            steps={[
+              {
+                href: "/equipment",
+                label: "Waar de stilstand zit",
+                why: "Beschikbaarheid en CIP per procesdeel.",
+              },
+              {
+                href: "/batches?verdict=REJECTED",
+                label: "Wat is afgekeurd",
+                why: "De afkeur achter de scrap ratio.",
+              },
+              {
+                href: "/orders",
+                label: "Wat er nog open staat",
+                why: "Planrealisatie en OTIF komen hiervandaan.",
+              },
+            ]}
+          />
         </>
       )}
     </main>
