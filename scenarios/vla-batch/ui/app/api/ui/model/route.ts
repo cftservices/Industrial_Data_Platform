@@ -22,6 +22,7 @@ const MODEL_PATH = process.env.FACTORY_MODEL ?? "/model/isa95-vla.json";
 type Recipe = {
   recipe_id?: string;
   product_name?: string;
+  basis_L?: number;
   pack_size_L?: number;
   cook_setpoint_C?: number;
   hold_sec?: number;
@@ -59,6 +60,10 @@ export async function GET() {
     recipe: {
       recipe_id: recipe.recipe_id ?? null,
       product_name: recipe.product_name ?? null,
+      // De schaal van elke niveaumeting. Zonder deze viel de bullet graph op
+      // /line terug op 0 tot 100 terwijl er 5000 L in de tank zat: de marker
+      // stond vastgepind rechts en de balk zei niets meer.
+      basis_L: recipe.basis_L ?? null,
       pack_size_L: recipe.pack_size_L ?? null,
       cook_setpoint_C: recipe.cook_setpoint_C ?? null,
       hold_sec: recipe.hold_sec ?? null,

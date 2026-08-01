@@ -86,6 +86,8 @@ export type UiModel = {
   recipe?: {
     recipe_id: string | null;
     product_name: string | null;
+    /** Batchgrootte in liter: de schaal voor elke niveaumeting. */
+    basis_L: number | null;
     pack_size_L: number | null;
     cook_setpoint_C: number | null;
     hold_sec: number | null;

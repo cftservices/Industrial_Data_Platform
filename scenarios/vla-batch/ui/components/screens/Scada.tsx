@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CrossLink, ScreenHeader } from "@/components/nav/ScreenHeader";
+import { ProcessView } from "@/components/screens/ProcessView";
 import { RefusalPanel } from "@/components/toolkit/RefusalPanel";
 import { StatusPill } from "@/components/toolkit/StatusPill";
 import { post } from "@/lib/client";
@@ -75,7 +76,7 @@ export function Scada() {
   }
 
   return (
-    <main className="mx-auto flex max-w-4xl flex-col gap-3 p-2 pb-16 sm:gap-4 sm:p-4">
+    <main className="mx-auto flex max-w-[1400px] flex-col gap-3 p-2 pb-16 sm:gap-4 sm:p-4">
       <ScreenHeader
         eyebrow="SCADA-console"
         title="Bediening"
@@ -103,6 +104,10 @@ export function Scada() {
         />
       )}
       {message && <p className="text-[0.8125rem] text-ink-muted">{message}</p>}
+
+      {/* Eerst zien wat het proces doet, dan pas ingrijpen. Een console zonder
+          procesbeeld is blind bedienen, en dat was precies wat hier ontbrak. */}
+      <ProcessView />
 
       <section className="tile flex flex-col gap-3">
         <span className="eyebrow">Lijnbesturing</span>

@@ -111,6 +111,22 @@ export function DeviationBand({
   max?: number;
   tone?: "neutral" | "warn" | "alarm";
 }) {
+  /**
+   * Geen spec en geen expliciete schaal betekende tot nu toe 0 tot 100. Bij een
+   * tankniveau van 5000 L stond de marker daardoor vastgepind aan de rechterkant
+   * en las de as "0 ... 100" naast een getal van 5000: de balk beweerde iets
+   * anders dan het cijfer ernaast. Een verzonnen schaal is erger dan geen
+   * schaal, dus zonder bron tekenen we hem niet.
+   */
+  const heeftSchaal = spec != null || (min != null && max != null);
+  if (!heeftSchaal) {
+    return (
+      <div className="flex h-3.5 items-center">
+        <span className="text-[0.625rem] text-ink-faint">geen schaal bekend</span>
+      </div>
+    );
+  }
+
   const lo = min ?? (spec ? spec.min - (spec.max - spec.min) * 0.5 : 0);
   const hi = max ?? (spec ? spec.max + (spec.max - spec.min) * 0.25 : 100);
   const span = hi - lo || 1;

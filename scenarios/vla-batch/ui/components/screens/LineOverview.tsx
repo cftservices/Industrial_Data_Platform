@@ -37,6 +37,10 @@ type Step = {
   };
   secondary: Array<{ label: string; unit: string; value: number | null; stale: boolean }>;
   spec: { min: number; max: number } | null;
+  /** Schaal met bron, of null als er geen te verantwoorden schaal is. */
+  scale: { min: number; max: number; source: string } | null;
+  /** Reden waarom de spec nog niet wordt toegepast, of null. */
+  spec_pending: string | null;
   distance: { label: string; value: number; unit: string } | null;
   tone: "neutral" | "warn" | "alarm";
   stale: boolean;
@@ -80,6 +84,10 @@ function stepStatus(step: Step): Status {
   if (step.tone === "alarm") return "alarm";
   if (step.tone === "warn") return "warn";
   if (step.primary.value === null) return "unset";
+  // Nog niet beoordeeld is GEEN groen. Anders leest "wordt nog gekookt" als
+  // "voldoet aan de spec", en dat is precies het vals-groen dat de scan-gate
+  // elders met een derde toestand voorkomt.
+  if (step.spec_pending) return "unset";
   return "ok";
 }
 
@@ -113,9 +121,15 @@ function StepCard({ step }: { step: Step }) {
         <DeviationBand
           value={step.primary.value}
           spec={step.spec}
+          min={step.scale?.min}
+          max={step.scale?.max}
           tone={step.stale ? "neutral" : step.tone}
         />
       </div>
+
+      {step.spec_pending && (
+        <p className="text-[0.6875rem] text-ink-faint">{step.spec_pending}</p>
+      )}
 
       {step.distance && (
         <div className="flex items-baseline justify-between gap-2 text-[0.8125rem]">

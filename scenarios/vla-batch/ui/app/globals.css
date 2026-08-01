@@ -264,6 +264,18 @@ body {
   outline-offset: 2px;
 }
 
+/* Stroming in het procesbeeld. Een leiding waar product doorheen gaat, laat
+   dat zien; een leiding die stilstaat is een gewone lijn. Dat onderscheid is
+   het halve nut van een mimic. De regel hieronder voor prefers-reduced-motion
+   zet dit stil, en dan draagt de LIJNDIKTE het verschil nog steeds. */
+@keyframes flow {
+  to { stroke-dashoffset: -28; }
+}
+.pipe-flow {
+  stroke-dasharray: 6 8;
+  animation: flow 1.1s linear infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

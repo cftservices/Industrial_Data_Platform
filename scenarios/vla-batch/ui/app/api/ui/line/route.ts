@@ -68,6 +68,39 @@ export async function GET() {
   const staleFromModel = modelAvailable && model.stale_threshold_s !== undefined;
   const recipe = ((model.recipes as Array<Record<string, unknown>>) ?? [{}])[0] ?? {};
   const viscSpec = recipe.viscosity_spec_cP as { min: number; max: number } | undefined;
+  const basisL = toNumber(recipe.basis_L);
+  const cookSetpoint = toNumber(recipe.cook_setpoint_C);
+  const packsTarget = toNumber(
+    (live?.filling as Record<string, unknown> | undefined)?.packs_target,
+  );
+  const batchState =
+    ((live?.batch as Record<string, unknown> | undefined)?.state as string | undefined) ?? null;
+
+  /**
+   * De schaal van een meting, met vermelding waar hij vandaan komt.
+   *
+   * Zonder dit viel de balk op /line terug op 0 tot 100. Bij een tankniveau van
+   * 5000 L stond de marker dan vastgepind rechts en las de as "0 ... 100": een
+   * meter die iets anders beweert dan het getal ernaast. Een verzonnen schaal
+   * is erger dan geen schaal, dus zonder bron blijft dit null en toont de UI
+   * dat er geen schaal bekend is.
+   */
+  function scaleFor(id: string): { min: number; max: number; source: string } | null {
+    switch (id) {
+      case "receiving":
+      case "mixing":
+        return basisL ? { min: 0, max: basisL, source: `batchgrootte ${basisL} L uit het recept` } : null;
+      case "cooling":
+        return cookSetpoint
+          ? { min: 0, max: Math.ceil(cookSetpoint * 1.15), source: "kook-setpoint uit het recept" }
+          : null;
+      case "filling":
+        return packsTarget ? { min: 0, max: packsTarget, source: "pakkendoel van de order" } : null;
+      default:
+        // Koken heeft een tweezijdige spec; die levert zijn schaal al.
+        return null;
+    }
+  }
 
   const reading = (area: string, eq: string, tag: string): Reading | null =>
     tags?.[statusTopic(area, eq, tag)] ?? null;
@@ -101,7 +134,23 @@ export async function GET() {
     const spec = s.id === "cooking" ? (viscSpec ?? null) : null;
     let tone: "neutral" | "warn" | "alarm" = "neutral";
     let distance: { label: string; value: number; unit: string } | null = null;
-    if (spec && value !== null) {
+
+    /**
+     * Viscositeit is pas na de hold een oordeel waard.
+     *
+     * Tijdens het koken bouwt hij zich op vanaf vrijwel nul, dus hem meteen
+     * tegen de ondergrens afrekenen levert een KRITIEK dat bij elke normale
+     * batch verschijnt en na een paar minuten vanzelf verdwijnt. Dat is een
+     * vals alarm, en vals alarm is precies wat ISA-18.2 bestrijdt: een
+     * operator die leert dat rood vanzelf overgaat, kijkt straks ook weg bij
+     * echt rood. De engine oordeelt zelf ook pas op end_viscosity_cP.
+     */
+    const pending =
+      s.id === "cooking" && !["COOLING", "FILLING", "COMPLETE"].includes(batchState ?? "")
+        ? "bouwt nog op, wordt beoordeeld na de hold"
+        : null;
+
+    if (spec && value !== null && !pending) {
       if (value < spec.min) {
         tone = "alarm";
         distance = { label: "onder ondergrens", value: spec.min - value, unit: s.primary.unit };
@@ -134,6 +183,9 @@ export async function GET() {
       },
       secondary,
       spec,
+      scale: scaleFor(s.id),
+      /** Gevuld als de spec bewust nog NIET wordt toegepast, met de reden. */
+      spec_pending: pending,
       distance,
       tone,
       stale,
