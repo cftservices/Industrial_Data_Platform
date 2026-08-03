@@ -232,3 +232,50 @@ class VlaBus:
             except (ValueError, TypeError):
                 out[topic] = raw
         return out
+
+    def snapshot_verbose(self) -> dict[str, dict]:
+        """dict topic -> {value, ts, quality, retained, age_s}.
+
+        De platte snapshot() gooit precies weg wat de UI nodig heeft om een
+        VEROUDERDE waarde te herkennen. De payload draagt `ts` en `quality` als
+        eerste-klas velden en de bus houdt zelf bij wanneer een topic voor het
+        laatst LIVE binnenkwam (`_rx`, gevuld in _on_message en bewust niet bij
+        een retained bericht).
+
+        Zonder dit toont een tag die twintig minuten stilligt zijn laatste
+        waarde alsof die actueel is, en bij een poll van 3 tot 5 seconden is dat
+        de meest waarschijnlijke faalmodus van de hele demo.
+        """
+        now = time.monotonic()
+        out: dict[str, dict] = {}
+        with self._lock:
+            items = list(self._tags.items())
+            rx = dict(self._rx)
+        for topic, raw in items:
+            value: Any = raw
+            ts = None
+            quality = None
+            unit = None
+            try:
+                obj = json.loads(raw)
+                if isinstance(obj, dict):
+                    value = obj.get("value", raw)
+                    ts = obj.get("ts")
+                    quality = obj.get("quality")
+                    unit = obj.get("unit")
+            except (ValueError, TypeError):
+                pass
+            seen = rx.get(topic)
+            out[topic] = {
+                "value": value,
+                "ts": ts,
+                "unit": unit,
+                # GOOD tenzij de payload iets anders zegt; ontbreekt het veld,
+                # dan is de herkomst onbekend en zeggen we dat ook.
+                "quality": quality or "UNKNOWN",
+                # Nooit een live-waarde ontvangen, alleen een retained bericht:
+                # dat is per definitie oude data.
+                "retained": seen is None,
+                "age_s": None if seen is None else round(now - seen, 1),
+            }
+        return out

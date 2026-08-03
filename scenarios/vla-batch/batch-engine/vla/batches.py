@@ -784,6 +784,12 @@ class BatchRunner:
                 # (and find the running batch) without an N+1 fetch per batch.
                 "order_id": b.get("order_id"),
                 "planned_L": b.get("planned_L"),
+                # completed_at + end_viscosity_cP are columns on the batch
+                # overview. Without them two of its six columns are blank on
+                # every row and the list looks broken rather than empty.
+                "completed_at": b.get("completed_at"),
+                "end_viscosity_cP": b.get("end_viscosity_cP"),
+                "verdict_ack": b.get("verdict_ack"),
             })
         return out
 

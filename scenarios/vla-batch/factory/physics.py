@@ -97,8 +97,42 @@ COOL_RATE_C_S = _envf("COOL_RATE_C_S", 1.5)          # cooling degrees C per pro
 FILL_RATE_PACKS_S = _envf("FILL_RATE_PACKS_S", 60.0)  # 1L packs filled per process-second
 AGITATOR_DEFAULT_RPM = 60.0
 
+# --- filler rejects ---------------------------------------------------------
+# Until now reject_count was initialised and reset but never incremented, so it
+# read 0 forever and every KPI that leans on scrap was uncomputable. Rejects are
+# modelled deterministically (no rng: a reproducible simulator is worth more
+# than a random one) as a function of end viscosity:
+#
+#   * a small baseline for seal and fill-weight faults, always present;
+#   * a penalty that grows as the product thins out below spec. Under-cooked vla
+#     is runny: it overfills, it does not seal cleanly, and the filler rejects it.
+#
+# So the Solve gets a second, measurable consequence. An under-cooked batch does
+# not just go to HOLD, it also throws away packs, and that shows up in the scrap
+# ratio and in the loss block in euros.
+REJECT_BASE_PCT = _envf("REJECT_BASE_PCT", 0.4)          # % of filled packs, normal running
+REJECT_OFFSPEC_PCT = _envf("REJECT_OFFSPEC_PCT", 6.0)    # extra % at full under-cook
+VISC_SPEC_MIN_cP = _envf("VISC_SPEC_MIN_cP", 150.0)      # matches factory-model verdict_rule
+
 AMBIENT_C = 20.0
 PACK_SIZE_L = 1.0
+
+# --- rauwmelksilo (receiving-tank-01) -------------------------------------
+# De silo trok tot nu toe NIETS af bij het doseren: de regel deed
+# `receiving_level_L - budget * 0.0`, dus de vermenigvuldiging met nul haalde
+# de onttrekking weg. Gevolg: 5000 kg melk per batch kwam uit het niets en het
+# niveau stond eeuwig op 8000 L. Dat was ook de reden dat de tag nooit op de
+# UNS verscheen: een change-based koppeling publiceert een constante nooit.
+RECEIVING_CAPACITY_L = _envf("RECEIVING_CAPACITY_L", 10000.0)
+RECEIVING_REFILL_BELOW_L = _envf("RECEIVING_REFILL_BELOW_L", 2500.0)
+RECEIVING_REFILL_RATE_L_S = _envf("RECEIVING_REFILL_RATE_L_S", 120.0)
+# Rauwe koemelk zit rond 1,03 kg/L. Het is een dichtheid en geen procesinstelling,
+# dus hij hoort hier en niet in het recept.
+MILK_DENSITY_KG_L = _envf("MILK_DENSITY_KG_L", 1.03)
+# Aanvoertemperatuur van een tankwagen, en de silo loopt langzaam op naar de
+# omgeving. Zo beweegt temp_C mee en is hij ook echt een meting.
+MILK_DELIVERY_C = _envf("MILK_DELIVERY_C", 5.0)
+RECEIVING_WARM_RATE_PER_S = _envf("RECEIVING_WARM_RATE_PER_S", 0.0008)
 
 
 class VlaProcess:
@@ -113,8 +147,9 @@ class VlaProcess:
         self.sim_time_s: float = 0.0
 
         # --- receiving-tank-01 ---
-        self.receiving_level_L: float = 8000.0
-        self.receiving_temp_C: float = 6.0
+        self.receiving_level_L: float = RECEIVING_CAPACITY_L * 0.8
+        self.receiving_temp_C: float = MILK_DELIVERY_C
+        self._receiving_filling: bool = False
         self.fat_setpoint_pct: float = 3.5
 
         # --- process-tank-01 (mixing) ---
@@ -308,6 +343,12 @@ class VlaProcess:
         else:
             self.agitator_rpm += (0.0 - self.agitator_rpm) * clamp(pdt * 0.5, 0, 1)
 
+        # De silo leeft ONAFHANKELIJK van de batch: hij wordt aangevuld en warmt
+        # langzaam op, ook als de lijn stilstaat. Dat is niet alleen realistisch,
+        # het is ook wat een niveaumeting tot een meting maakt in plaats van een
+        # constante die nooit gepubliceerd wordt.
+        self._tick_receiving(pdt)
+
         if self.state == DOSING:
             self._tick_dosing(pdt)
         elif self.state == COOKING:
@@ -318,6 +359,42 @@ class VlaProcess:
             self._tick_filling(pdt)
         # IDLE / COMPLETE: nothing to advance
 
+    def _tick_receiving(self, pdt: float) -> None:
+        """Rauwmelksilo: aanvulling en opwarming.
+
+        Zakt het niveau onder de drempel, dan komt er een tankwagen en loopt de
+        silo weer vol tot de capaciteit. De aangevoerde melk is koud, dus het
+        mengen van oud en nieuw trekt de temperatuur omlaag; daartussenin loopt
+        hij langzaam op naar de omgevingstemperatuur.
+
+        Zonder dit stond het niveau eeuwig stil op zijn beginwaarde en werd de
+        tag door de change-based OPC-UA-koppeling nooit gepubliceerd. De
+        ontvangsttank stond daardoor leeg op elk scherm.
+        """
+        if self.receiving_level_L < RECEIVING_REFILL_BELOW_L:
+            self._receiving_filling = True
+        if getattr(self, "_receiving_filling", False):
+            toevoer_L = min(
+                RECEIVING_REFILL_RATE_L_S * pdt,
+                RECEIVING_CAPACITY_L - self.receiving_level_L,
+            )
+            if toevoer_L > 0:
+                # Menging van twee volumes: gewogen gemiddelde, geen sprong.
+                totaal = self.receiving_level_L + toevoer_L
+                self.receiving_temp_C = (
+                    self.receiving_temp_C * self.receiving_level_L
+                    + MILK_DELIVERY_C * toevoer_L
+                ) / max(totaal, 1e-6)
+                self.receiving_level_L = totaal
+            if self.receiving_level_L >= RECEIVING_CAPACITY_L - 0.5:
+                self.receiving_level_L = RECEIVING_CAPACITY_L
+                self._receiving_filling = False
+        else:
+            # Gekoeld, maar niet perfect: de silo kruipt richting omgeving.
+            self.receiving_temp_C += (
+                (AMBIENT_C - self.receiving_temp_C) * RECEIVING_WARM_RATE_PER_S * pdt
+            )
+
     def _tick_dosing(self, pdt: float) -> None:
         self.phase = "dosing"
         # dose_off fault reduces the actually-delivered fraction of one material (milk)
@@ -325,6 +402,10 @@ class VlaProcess:
         # distribute dosing budget across materials proportionally to their setpoints
         total_sp = sum(self.dose_setpoint_kg.values()) or 1.0
         budget = DOSE_RATE_KG_S * pdt
+        # Stand voor deze tick, om verderop te weten hoeveel melk er ECHT uit de
+        # silo is gegaan. Het verschil, niet het budget: bij een dose_off-fout
+        # gaat er minder doorheen dan begroot.
+        milk_before_kg = self.dose_actual_kg["milk"]
         eff_setpoints: dict[str, float] = {}
         for mat, sp in self.dose_setpoint_kg.items():
             eff_sp = sp
@@ -353,8 +434,15 @@ class VlaProcess:
         total_sp_all = sum(self.dose_setpoint_kg.values()) or 1.0
         dosed_frac = clamp(sum(self.dose_actual_kg.values()) / total_sp_all, 0.0, 1.0)
         self.mix_level_L = self.batch_volume_L * dosed_frac
-        # pull from receiving tank (milk source)
-        self.receiving_level_L = max(0.0, self.receiving_level_L - budget * 0.0)
+
+        # Onttrekking uit de rauwmelksilo. ALLEEN melk komt daaruit; suiker,
+        # zetmeel en cacao zijn droge grondstoffen uit een andere stroom. De
+        # oude regel vermenigvuldigde de onttrekking met 0.0 en trok dus niets
+        # af, waardoor de melk uit het niets kwam en de silo nooit leegliep.
+        milk_drawn_kg = max(0.0, self.dose_actual_kg["milk"] - milk_before_kg)
+        self.receiving_level_L = max(
+            0.0, self.receiving_level_L - milk_drawn_kg / MILK_DENSITY_KG_L
+        )
 
         # gentle pre-warm during dosing
         self.mix_temp_C += (self.receiving_temp_C + 10.0 - self.mix_temp_C) * clamp(pdt * 0.1, 0, 1)
@@ -413,20 +501,37 @@ class VlaProcess:
             self.phase = "filling"
             self._log_event("phase_change", {"to": FILLING})
 
+    def _reject_rate(self) -> float:
+        """Fraction of filled packs the filler rejects, from end viscosity.
+
+        Deterministic by design. `shortfall` is 0.0 at or above the spec minimum
+        and 1.0 at raw, ungelatinised viscosity, so a fully under-cooked batch
+        gets the whole off-spec penalty and a good one only the baseline."""
+        span = max(1e-6, VISC_SPEC_MIN_cP - VISC_BASE_cP)
+        shortfall = clamp((VISC_SPEC_MIN_cP - self.viscosity_cP) / span, 0.0, 1.0)
+        return (REJECT_BASE_PCT + REJECT_OFFSPEC_PCT * shortfall) / 100.0
+
     def _tick_filling(self, pdt: float) -> None:
         self.phase = "filling"
-        packs_to_make = int(self.mix_level_L / self.pack_size_L)
-        if self.packs_total < packs_to_make:
+        # Every pack the volume yields gets filled; part of them is rejected.
+        # packs_total counts GOOD packs only, so good + rejects == filled and the
+        # mass balance stays honest for the yield KPI.
+        packs_to_fill = int(self.mix_level_L / self.pack_size_L)
+        if self._packs_f < packs_to_fill:
             # accumulate fractionally so the rate holds exactly at any TICK_INTERVAL
             self._packs_f += FILL_RATE_PACKS_S * pdt
-            self.packs_total = min(packs_to_make, int(self._packs_f))
-        if self.packs_total >= packs_to_make:
-            self.packs_total = packs_to_make
+        filled = min(packs_to_fill, int(self._packs_f))
+        self.reject_count = int(filled * self._reject_rate())
+        self.packs_total = filled - self.reject_count
+
+        if filled >= packs_to_fill:
             self.state = COMPLETE
             self.phase = "complete"
             self._log_event("batch_complete", {
                 "batch_id": self.batch_id,
                 "packs_total": self.packs_total,
+                "reject_count": self.reject_count,
+                "packs_filled": filled,
                 "peak_cook_temp_C": round(self.peak_cook_temp_C, 2),
                 "hold_elapsed_sec": round(self.hold_elapsed_sec, 1),
                 "end_viscosity_cP": round(self.viscosity_cP, 1),

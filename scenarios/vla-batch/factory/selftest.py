@@ -5,6 +5,7 @@ Runs a full chocolate-vla batch through the state machine and asserts:
   2. every dose_actual reaches its recipe setpoint
   3. end viscosity is IN-SPEC (150-300 cP) on a normal batch
   4. with a cook_undertemp fault, end viscosity is < 150 cP (out-of-spec -> Solve trigger)
+  5. the raw-milk silo actually EMPTIES when milk is dosed, and refills
 
 Run:  python selftest.py         -> prints PASS/FAIL, exit 0 on PASS
 """
@@ -16,6 +17,7 @@ import sys
 from physics import (
     VlaProcess, RECIPES, STATES,
     IDLE, DOSING, COOKING, COOLING, FILLING, COMPLETE,
+    MILK_DENSITY_KG_L, RECEIVING_CAPACITY_L, RECEIVING_REFILL_BELOW_L,
 )
 
 RECIPE = "chocolate-vla-1L"
@@ -112,6 +114,64 @@ def main() -> int:
     below_spec = visc_f < SPEC_MIN
     all_ok &= check(f"faulted viscosity < {SPEC_MIN:.0f} cP (out-of-spec, Solve trigger)",
                     below_spec, f"{visc_f:.1f} cP (peak_cook={pf.peak_cook_temp_C:.1f}C)")
+
+    # ---- 3. RAW-MILK SILO ---------------------------------------------------
+    # This one exists because the drain was multiplied by 0.0: the line read
+    # `receiving_level_L - budget * 0.0`, so 5000 kg of milk per batch came out
+    # of nowhere and the silo sat at its start value forever. That is also why
+    # the tag never reached the UNS -- a change-based coupling never publishes a
+    # constant -- and why the receiving tank was blank on every screen.
+    print("\n-- raw-milk silo --")
+    p3 = VlaProcess()
+    start_L = p3.receiving_level_L
+    p3, _, _, _ = run_batch()
+    drawn_L = start_L - p3.receiving_level_L
+    expected_L = p3.dose_actual_kg["milk"] / MILK_DENSITY_KG_L
+
+    all_ok &= check("silo drains when milk is dosed", drawn_L > 0,
+                    f"{drawn_L:.0f} L")
+    all_ok &= check("drain matches the milk actually dosed",
+                    abs(drawn_L - expected_L) < 1.0,
+                    f"{drawn_L:.1f} L vs {expected_L:.1f} L expected")
+
+    # Only milk comes from this silo; sugar, starch and cocoa are dry
+    # ingredients from another stream. Draining the full dosed mass would empty
+    # it 17 percent too fast.
+    total_kg = sum(p3.dose_actual_kg.values())
+    all_ok &= check("only milk is drawn, not the whole dosed mass",
+                    drawn_L < total_kg / MILK_DENSITY_KG_L - 1.0,
+                    f"{drawn_L:.0f} L of {total_kg:.0f} kg total dosed")
+
+    # Keep running: below the threshold a tanker arrives and the silo refills,
+    # otherwise the demo starves after two batches.
+    p4 = VlaProcess()
+    for i in range(6):
+        p4.start_batch(RECIPE, batch_id=f"SELFTEST-SILO-{i}")
+        t = 0
+        while p4.state != COMPLETE and t < MAX_TICKS:
+            p4.tick(DT)
+            t += 1
+    all_ok &= check("silo never starves over six batches", p4.receiving_level_L > 0,
+                    f"{p4.receiving_level_L:.0f} L left")
+    all_ok &= check("silo stays within capacity",
+                    p4.receiving_level_L <= RECEIVING_CAPACITY_L + 0.5,
+                    f"{p4.receiving_level_L:.0f} of {RECEIVING_CAPACITY_L:.0f} L")
+
+    # The whole point for the UI: both tags have to MOVE, otherwise they are
+    # never published and the tank shows dashes.
+    p5 = VlaProcess()
+    levels, temps = set(), set()
+    p5.start_batch(RECIPE, batch_id="SELFTEST-SILO-MOVE")
+    t = 0
+    while p5.state != COMPLETE and t < MAX_TICKS:
+        p5.tick(DT)
+        levels.add(round(p5.receiving_level_L, 1))
+        temps.add(round(p5.receiving_temp_C, 2))
+        t += 1
+    all_ok &= check("level_L changes during a batch", len(levels) > 5,
+                    f"{len(levels)} distinct values")
+    all_ok &= check("temp_C changes during a batch", len(temps) > 1,
+                    f"{len(temps)} distinct values")
 
     # ---- verdict ------------------------------------------------------------
     print()

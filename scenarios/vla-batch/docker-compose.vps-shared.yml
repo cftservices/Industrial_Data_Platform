@@ -31,6 +31,13 @@ services:
     ports:
       - "127.0.0.1:8090:80"
 
+  # De nieuwe Next.js-UI draait ernaast op een eigen poort, met een eigen
+  # nginx-vhost. Op deze VPS doet host-nginx de TLS en de basic-auth; er is
+  # geen Traefik, dus de labels in docker-compose.vla.yml worden hier genegeerd.
+  vla-ui:
+    ports:
+      - "127.0.0.1:8091:3000"
+
   grafana:
     ports:
       - "127.0.0.1:3001:3000"

@@ -1,0 +1,37 @@
+{
+  "name": "vla-ui",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint:tokens": "node scripts/lint-tokens.mjs",
+    "check:contrast": "node scripts/contrast-check.mjs",
+    "verify": "npm run lint:tokens && npm run check:contrast && npm run check:parity && npm run build && npm run check:families",
+    "check:families": "node scripts/check-families.mjs",
+    "check:parity": "node scripts/check-parity.mjs",
+    "test:e2e": "playwright test",
+    "test:e2e:update": "playwright test --update-snapshots"
+  },
+  "dependencies": {
+    "next": "15.5.22",
+    "react": "19.1.1",
+    "react-dom": "19.1.1",
+    "@tanstack/react-query": "5.62.7",
+    "uplot": "1.6.31"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.2",
+    "@types/react": "19.0.2",
+    "@types/react-dom": "19.0.2",
+    "typescript": "5.7.2",
+    "tailwindcss": "4.3.3",
+    "@tailwindcss/postcss": "4.3.3",
+    "@playwright/test": "1.56.1"
+  },
+  "overrides": {
+    "sharp": ">=0.35.0",
+    "postcss": ">=8.5.18"
+  }
+}

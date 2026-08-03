@@ -1,0 +1,316 @@
+@import "tailwindcss";
+
+/* ============================================================================
+   TOKENSYSTEEM, drie tiers.
+   Bron: 04-Frontend/hmi-style-guide.md §3, beproefd in 10-Research/prototype/.
+
+   Regel: componentcode gebruikt UITSLUITEND tier 2 en tier 3. Nooit een
+   tier-1 token, nooit een hexwaarde, nooit een Tailwind-defaultkleur.
+   scripts/lint-tokens.mjs handhaaft dat.
+   ========================================================================= */
+
+/* ---- Tier 2 + 3 als Tailwind-utilities ---------------------------------
+   `inline` is verplicht omdat elk token naar een andere variabele verwijst;
+   zonder `inline` resolveert de utility op de plek van definitie en schakelt
+   hij niet meer mee met het thema.
+
+   `--color-*: initial` wist Tailwinds hele defaultpalet. Daarmee bestaat
+   `bg-blue-500` simpelweg niet meer. Dat is de handhaving: een afspraak dat
+   je het niet gebruikt is geen handhaving, het onbeschikbaar maken wel. */
+@theme inline {
+  --color-*: initial;
+
+  /* oppervlak */
+  --color-canvas: var(--ui-canvas);
+  --color-surface: var(--ui-surface);
+  --color-surface-sunken: var(--ui-surface-sunken);
+  --color-line: var(--ui-line);
+  --color-line-strong: var(--ui-line-strong);
+
+  /* tekst */
+  --color-ink: var(--ui-ink);
+  --color-ink-muted: var(--ui-ink-muted);
+  --color-ink-faint: var(--ui-ink-faint);
+
+  /* statustaal: IDENTIEK in beide families, alleen de chrome verschilt */
+  --color-status-idle: var(--ui-status-idle);
+  --color-status-run: var(--ui-status-run);
+  --color-status-done: var(--ui-status-done);
+  --color-status-warn: var(--ui-status-warn);
+  --color-status-alarm: var(--ui-status-alarm);
+  --color-status-unset: var(--ui-status-unset);
+  --color-status-stale: var(--ui-status-stale);
+
+  /* kwalitatieve banden: intensiteiten van EEN hue, nooit drie kleuren
+     (Few's bullet-graph-specificatie, met kleurenblindheid als reden) */
+  --color-band-outer: var(--ui-band-outer);
+  --color-band-mid: var(--ui-band-mid);
+  --color-band-inner: var(--ui-band-inner);
+
+  /* delta-richting */
+  --color-favourable: var(--ui-favourable);
+  --color-unfavourable: var(--ui-unfavourable);
+
+  /* tier 3, familie-eigen */
+  --color-accent: var(--ui-accent);
+  --radius-tile: var(--ui-radius-tile);
+
+  --font-ui: var(--ui-font);
+  --font-mono: var(--ui-font-mono);
+}
+
+/* ---- Tier 1: primitives. ALLEEN hier staan hexwaarden. ------------------
+   Neutralen hebben een blauwbias: een pure mid-grijs leest als onbedacht. */
+:root {
+  --slate-04: #0d1218;
+  --slate-08: #141a21;
+  --slate-12: #1c242d;
+  --slate-18: #27313c;
+  --slate-26: #37434f;
+  --slate-40: #56646f;
+  --slate-55: #78848e;
+  --slate-70: #a8b2ba;
+  --slate-84: #ccd3d9;
+  --slate-92: #e4e9ed;
+  --slate-96: #f0f3f6;
+  --slate-98: #f6f8fa;
+  --white: #ffffff;
+
+  /* Blauw-oranje-as met echt lichtheidsverschil. Groen naast donkergroen is
+     hetzelfde hue met alleen een lichtheidsstap, en donkergroen naast
+     oranje-rood is exact het paar dat protanopen verwarren. */
+  --blue-45: #2f6fa8;
+  --blue-62: #6ea3ce;
+  --amber-52: #c77a0a;
+  --amber-70: #e6a94a;
+  --vermilion-42: #b03a2e;
+  --vermilion-60: #d9705f;
+  --violet-50: #6b5b9a;
+  --violet-64: #9186bd;
+
+  /* Systeemstack, bewust geen webfont. De Artifact-CSP blokkeerde font-CDN's
+     in de prototypes en een Docker-build zonder netwerk zou op next/font/google
+     stukgaan; een stille fallback is erger dan een bewuste keuze. */
+  --ui-font: ui-sans-serif, "Segoe UI Variable Text", "Segoe UI", system-ui,
+             -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --ui-font-mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+}
+
+/* ---- Tier 2 waarden, licht ---------------------------------------------- */
+:root,
+:root[data-theme="light"] {
+  --ui-canvas: var(--slate-98);
+  --ui-surface: var(--white);
+  --ui-surface-sunken: var(--slate-96);
+  --ui-line: var(--slate-92);
+  --ui-line-strong: var(--slate-84);
+
+  --ui-ink: var(--slate-12);
+  --ui-ink-muted: var(--slate-40);
+  --ui-ink-faint: var(--slate-55);
+
+  --ui-status-idle: var(--slate-55);
+  --ui-status-run: var(--blue-45);
+  --ui-status-done: var(--slate-40);
+  --ui-status-warn: var(--amber-52);
+  --ui-status-alarm: var(--vermilion-42);
+  /* Zelfde neutraal als idle: twee grijstinten die alleen in lichtheid
+     verschillen zijn geen onderscheid, en de lichtere haalde 1.4.11 niet
+     (2.16 tegen wit). Het verschil met idle wordt door de VORM gedragen:
+     unset is een HOLLE balk, idle een gevulde. Vorm boven kleur, precies wat
+     de gids elders ook eist. */
+  --ui-status-unset: var(--slate-55);
+  --ui-status-stale: var(--violet-50);
+
+  --ui-band-outer: color-mix(in oklab, var(--slate-12) 12%, transparent);
+  --ui-band-mid: color-mix(in oklab, var(--slate-12) 20%, transparent);
+  --ui-band-inner: color-mix(in oklab, var(--slate-12) 34%, transparent);
+
+  --ui-favourable: var(--blue-45);
+  --ui-unfavourable: var(--vermilion-42);
+}
+
+/* ---- Tier 2 waarden, donker --------------------------------------------
+   De themetoggle moet de media query in BEIDE richtingen overrulen, dus
+   beide standen staan expliciet. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ui-canvas: var(--slate-08);
+    --ui-surface: var(--slate-12);
+    --ui-surface-sunken: var(--slate-04);
+    --ui-line: var(--slate-18);
+    --ui-line-strong: var(--slate-26);
+
+    --ui-ink: var(--slate-96);
+    --ui-ink-muted: var(--slate-70);
+    --ui-ink-faint: var(--slate-55);
+
+    --ui-status-idle: var(--slate-55);
+    --ui-status-run: var(--blue-62);
+    --ui-status-done: var(--slate-55);
+    --ui-status-warn: var(--amber-70);
+    --ui-status-alarm: var(--vermilion-60);
+    --ui-status-unset: var(--slate-55);  /* zie de noot in het lichte blok */
+    --ui-status-stale: var(--violet-64);
+
+    --ui-band-outer: color-mix(in oklab, var(--slate-96) 10%, transparent);
+    --ui-band-mid: color-mix(in oklab, var(--slate-96) 17%, transparent);
+    --ui-band-inner: color-mix(in oklab, var(--slate-96) 28%, transparent);
+
+    --ui-favourable: var(--blue-62);
+    --ui-unfavourable: var(--vermilion-60);
+  }
+}
+
+:root[data-theme="dark"] {
+  --ui-canvas: var(--slate-08);
+  --ui-surface: var(--slate-12);
+  --ui-surface-sunken: var(--slate-04);
+  --ui-line: var(--slate-18);
+  --ui-line-strong: var(--slate-26);
+  --ui-ink: var(--slate-96);
+  --ui-ink-muted: var(--slate-70);
+  --ui-ink-faint: var(--slate-55);
+  --ui-status-idle: var(--slate-55);
+  --ui-status-run: var(--blue-62);
+  --ui-status-done: var(--slate-55);
+  --ui-status-warn: var(--amber-70);
+  --ui-status-alarm: var(--vermilion-60);
+  --ui-status-unset: var(--slate-55);  /* zie de noot in het lichte blok */
+  --ui-status-stale: var(--violet-64);
+  --ui-band-outer: color-mix(in oklab, var(--slate-96) 10%, transparent);
+  --ui-band-mid: color-mix(in oklab, var(--slate-96) 17%, transparent);
+  --ui-band-inner: color-mix(in oklab, var(--slate-96) 28%, transparent);
+  --ui-favourable: var(--blue-62);
+  --ui-unfavourable: var(--vermilion-60);
+}
+
+/* ============================================================================
+   Tier 3: familie-eigen chrome.
+   Gezet via route-groups op [data-ui], niet via props. Zo kan een
+   operatorscherm geen decoratieve kleur gebruiken, ook niet per ongeluk:
+   de accentkleur BESTAAT daar, hij is alleen grijs.
+   ========================================================================= */
+
+[data-ui="mgmt"] {
+  --ui-accent: var(--ui-status-run);
+  --ui-radius-tile: 3px;
+  --shadow-tile: 0 1px 2px color-mix(in oklab, var(--slate-26) 10%, transparent);
+  --density-row: 0.5rem;
+  --tile-pad: 1rem;
+}
+
+[data-ui="ops"] {
+  --ui-accent: var(--ui-ink-muted);
+  --ui-radius-tile: 0px;
+  --shadow-tile: none;
+  --density-row: 0.3125rem;
+  --tile-pad: 0.75rem;
+}
+
+:root[data-theme="dark"] [data-ui="mgmt"],
+:root:not([data-theme="light"]) [data-ui="mgmt"] {
+  --shadow-tile: 0 1px 2px rgb(0 0 0 / 0.4);
+}
+
+/* ============================================================================
+   BASIS
+   ========================================================================= */
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-ui);
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Elke waarde in het hele systeem. Geen monospace voor procesgetallen, wel
+   kolomuitlijning: tabular-nums plus slashed-zero voorkomt het springen van
+   cijfers bij een 1 Hz-update zonder dat het scherm als terminal leest. */
+.num {
+  font-variant-numeric: tabular-nums slashed-zero;
+  font-feature-settings: "tnum" 1, "zero" 1;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.8125em;
+  letter-spacing: -0.01em;
+}
+
+.eyebrow {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  font-weight: 600;
+  color: var(--color-ink-faint);
+}
+
+.tile {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-tile);
+  box-shadow: var(--shadow-tile);
+  padding: var(--tile-pad);
+}
+
+:where(a, button, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-status-run);
+  outline-offset: 2px;
+}
+
+/* Stroming in het procesbeeld. Een leiding waar product doorheen gaat, laat
+   dat zien; een leiding die stilstaat is een gewone lijn. Dat onderscheid is
+   het halve nut van een mimic. De regel hieronder voor prefers-reduced-motion
+   zet dit stil, en dan draagt de LIJNDIKTE het verschil nog steeds. */
+@keyframes flow {
+  to { stroke-dashoffset: -28; }
+}
+.pipe-flow {
+  stroke-dasharray: 6 8;
+  animation: flow 1.1s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ============================================================================
+   RESPONSIEF
+   Regel: de pagina zelf schuift nooit horizontaal. Brede inhoud (tabellen,
+   grafieken) scrollt in zijn eigen container.
+   ========================================================================= */
+
+html, body { max-width: 100%; overflow-x: hidden; }
+
+/* Tabellen zijn op een telefoon het eerste dat breekt. */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.table-scroll > table { min-width: 34rem; }
+
+/* Aanraakdoelen. 44 px is de gangbare ondergrens; met handschoenen aan een
+   vullijn is dat geen luxe. */
+@media (pointer: coarse) {
+  button, a[href], select, input, summary {
+    min-height: 44px;
+  }
+  button, a[href] { touch-action: manipulation; }
+}
+
+/* Op smalle schermen mag de chrome krimpen, maar de dichtheid van de
+   ops-familie blijft: een operator wil meer zien, niet minder. */
+@media (max-width: 640px) {
+  [data-ui="mgmt"] { --tile-pad: 0.75rem; }
+  [data-ui="ops"] { --tile-pad: 0.625rem; }
+  body { font-size: 0.9375rem; }
+}

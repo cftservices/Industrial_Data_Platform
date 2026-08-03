@@ -1,0 +1,205 @@
+"use client";
+
+import { useRouter, useSearchParams } from "next/navigation";
+import { NextStep } from "@/components/nav/NextStep";
+import { CrossLink, ScreenHeader } from "@/components/nav/ScreenHeader";
+import { KpiTile } from "@/components/toolkit/KpiTile";
+import { LossBlock } from "@/components/toolkit/LossBlock";
+import { StatusPill } from "@/components/toolkit/StatusPill";
+import { useKpiSummary } from "@/lib/queries";
+import { shortTime, windowLabel } from "@/lib/format";
+
+/**
+ * Scherm 12, management overview (spec §12).
+ *
+ * De opening van de demo richting de koper: bedrag, oorzaak, handeling, en pas
+ * daarna de draaiende fabriek als onthulling.
+ *
+ * Het venster staat in de URL (?window=week), zodat een bevinding deelbaar en
+ * bookmarkbaar is en de terugknop werkt. Dat is Shneiderman's "history" en
+ * "extract", de twee taken die iedereen vergeet naast overview-zoom-details.
+ */
+
+const WINDOWS = [
+  { id: "shift", label: "Dienst" },
+  { id: "day", label: "Dag" },
+  { id: "week", label: "Week" },
+  { id: "month", label: "Maand" },
+] as const;
+
+export function ManagementOverview() {
+  const params = useSearchParams();
+  const router = useRouter();
+  const window = params.get("window") ?? "week";
+
+  const { data, isPending, isError, error, refetch, dataUpdatedAt } = useKpiSummary(window, true);
+
+  function setWindow(id: string) {
+    const next = new URLSearchParams(params.toString());
+    next.set("window", id);
+    // PUSH en niet replace. De kopnoot hierboven belooft dat de terugknop
+    // werkt (Shneiderman's "history"), en met replace komt er geen
+    // historie-entry: goBack sprong naar about:blank. Filters die een rij
+    // selecteren blijven wel replace, anders vult een demo de historie met
+    // dertig klikken.
+    router.push(`?${next.toString()}`, { scroll: false });
+  }
+
+  return (
+    <main className="mx-auto flex max-w-[1440px] flex-col gap-4 p-3 pb-16 sm:gap-5 sm:p-6">
+      <ScreenHeader
+        eyebrow="Managementoverzicht"
+        title="DairyWorks, lijn Vla"
+        subtitle={data ? windowLabel(data.window, data.from) : " "}
+        actions={[
+          { href: "/", label: "Plant overview", title: "Ligt de dienst op plan" },
+          { href: "/orders", label: "Orders" },
+          { href: "/equipment", label: "Equipment" },
+          { href: "/reports", label: "Rapporten" },
+        ]}
+      >
+        <div className="flex flex-wrap items-end gap-5">
+          <div className="flex flex-col gap-1.5">
+            <span className="eyebrow" id="lbl-window">
+              Venster
+            </span>
+            <div
+              role="group"
+              aria-labelledby="lbl-window"
+              className="inline-flex overflow-hidden rounded-[var(--radius-tile)] border border-line-strong bg-surface"
+            >
+              {WINDOWS.map((w) => (
+                <button
+                  key={w.id}
+                  type="button"
+                  aria-pressed={window === w.id}
+                  onClick={() => setWindow(w.id)}
+                  className={`border-r border-line px-2.5 py-1 text-[0.8125rem] last:border-r-0 ${
+                    window === w.id
+                      ? "bg-ink font-semibold text-canvas"
+                      : "text-ink-muted hover:text-ink"
+                  }`}
+                >
+                  {w.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <span className="eyebrow">Gegevens</span>
+            <span className="flex items-center gap-2 text-[0.8125rem] text-ink-muted">
+              {isError ? (
+                <StatusPill status="alarm">Engine offline</StatusPill>
+              ) : (
+                <StatusPill status="ok">Live</StatusPill>
+              )}
+              {/* data-volatile: een klok verandert per seconde en maakt elke
+                  snapshot-vergelijking kansspel. e2e/accessibility.spec.ts
+                  maskeert alles met dit attribuut. */}
+              <span className="num" data-volatile>
+                {dataUpdatedAt ? `bijgewerkt ${shortTime(new Date(dataUpdatedAt).toISOString())}` : ""}
+              </span>
+            </span>
+          </div>
+        </div>
+      </ScreenHeader>
+
+      {/* Per-blok foutafhandeling: de KPI-rij en het verliesblok falen los van
+          elkaar. Een storing in het ene mag het andere niet leegmaken. */}
+      {isError ? (
+        <section className="tile flex flex-col items-start gap-3">
+          <StatusPill status="alarm">KPI&apos;s niet beschikbaar</StatusPill>
+          <p className="text-[0.8125rem] text-ink-muted">
+            {(error as { message?: string })?.message ?? "onbekende fout"}
+          </p>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            className="rounded-[var(--radius-tile)] border border-line-strong px-3 py-1 text-[0.8125rem] font-semibold hover:border-ink-muted"
+          >
+            Opnieuw proberen
+          </button>
+        </section>
+      ) : isPending ? (
+        <section className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,215px),1fr))]">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="tile h-[188px] animate-pulse bg-surface-sunken" />
+          ))}
+        </section>
+      ) : (
+        <>
+          <section aria-label="Kernprestatie-indicatoren">
+            <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(215px,1fr))]">
+              {data.kpis.map((kpi) => (
+                <KpiTile key={kpi.kpi_id} kpi={kpi} />
+              ))}
+            </div>
+          </section>
+
+          <div className="grid items-start gap-5 lg:[grid-template-columns:minmax(0,1.55fr)_minmax(0,1fr)]">
+            <LossBlock losses={data.losses} window={windowLabel(data.window, data.from)} />
+
+            <section className="tile flex flex-col gap-3">
+              <div>
+                <span className="eyebrow">Venstercontract</span>
+                <h2 className="text-base font-semibold tracking-[-0.01em]">Scherm en rapport</h2>
+              </div>
+              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[0.8125rem] text-ink-muted">
+                <dt className="font-semibold">Van</dt>
+                <dd className="num">{data.from.slice(0, 16).replace("T", " ")}</dd>
+                <dt className="font-semibold">Tot</dt>
+                <dd className="num">{data.to.slice(0, 16).replace("T", " ")}</dd>
+                <dt className="font-semibold">Tijdzone</dt>
+                <dd>{data.timezone}</dd>
+                <dt className="font-semibold">Dienst</dt>
+                <dd className="num">{data.shift_hours} uur</dd>
+              </dl>
+              <p className="text-[0.8125rem] text-ink-muted">
+                Het PDF krijgt exact dezelfde parameters mee, zodat scherm en rapport gegarandeerd
+                hetzelfde getal tonen.
+              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                {/* Het GEKOZEN venster gaat mee, niet een vast aantal dagen.
+                    Hiervoor stond hier onvoorwaardelijk days=7 pal onder de
+                    tekst dat het rapport dezelfde parameters krijgt: koos je
+                    "Maand", dan kreeg je een week. */}
+                <a
+                  href={`/api/v1/report/period?window=${encodeURIComponent(window)}&format=pdf`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-[var(--radius-tile)] border border-line-strong px-3 py-1.5 text-[0.8125rem] font-semibold hover:border-ink-muted"
+                >
+                  Rapport over {WINDOWS.find((w) => w.id === window)?.label.toLowerCase() ?? window}{" "}
+                  (PDF)
+                </a>
+                <CrossLink href="/reports">andere rapporten</CrossLink>
+                <CrossLink href="/analyse">zelf analyseren</CrossLink>
+              </div>
+            </section>
+          </div>
+
+          <NextStep
+            steps={[
+              {
+                href: "/equipment",
+                label: "Waar de stilstand zit",
+                why: "Beschikbaarheid en CIP per procesdeel.",
+              },
+              {
+                href: "/batches?verdict=REJECTED",
+                label: "Wat is afgekeurd",
+                why: "De afkeur achter de scrap ratio.",
+              },
+              {
+                href: "/orders",
+                label: "Wat er nog open staat",
+                why: "Planrealisatie en OTIF komen hiervandaan.",
+              },
+            ]}
+          />
+        </>
+      )}
+    </main>
+  );
+}

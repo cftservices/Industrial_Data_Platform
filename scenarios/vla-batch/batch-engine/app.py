@@ -23,7 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
-from vla import inventory, model as M
+from vla import alarms as A, inventory, kpi as K, line as L, model as M
 from vla.batches import BatchRunner
 from vla.bus import VlaBus
 from vla.db import get_db, seed_recipes
@@ -109,6 +109,14 @@ class CreateHu(BaseModel):
 
 
 class HuAction(BaseModel):
+    operator_id: str | None = None
+
+
+class ShelveRequest(BaseModel):
+    # Reden en einddatum zijn verplicht: een parkering zonder beide laat een
+    # alarm stil verdwijnen.
+    reason: str
+    until: str
     operator_id: str | None = None
 
 
@@ -233,12 +241,16 @@ def health():
 
 
 @app.get(f"{API}/tags")
-def live_tags():
-    """Snapshot of latest UNS values (dict topic -> value) for the dashboard."""
+def get_tags(verbose: int = Query(default=0)):
+    """Laatste UNS-snapshot.
+
+    Met ?verbose=1 komt per topic {value, ts, unit, quality, retained, age_s}.
+    De platte vorm gooit precies weg wat nodig is om een VEROUDERDE waarde te
+    herkennen, en stale is een eerste-klas toestand op de operatorschermen."""
     bus = STATE.get("bus")
     if bus is None:
         raise HTTPException(503, "engine not initialized")
-    return bus.snapshot()
+    return bus.snapshot_verbose() if verbose else bus.snapshot()
 
 
 @app.get(f"{API}/equipment")
@@ -550,15 +562,85 @@ def ack_alarm(alarm_id: str, body: AckRequest):
     return alarm
 
 
+@app.get(f"{API}/alarms")
+def list_alarms(since: str | None = Query(default=None),
+                priority: str | None = Query(default=None),
+                state: str | None = Query(default=None),
+                limit: int = Query(default=200)):
+    """Alarmen lezen. Bestond niet: er was alleen een ack-route, waardoor een
+    alarmscherm onmogelijk was."""
+    db = STATE.get("db")
+    if db is None:
+        raise HTTPException(503, "engine not initialized")
+    return A.list_alarms(db, since=since, priority=priority, state=state, limit=limit)
+
+
+@app.post(f"{API}/alarms/{{alarm_id}}/shelve")
+def shelve_alarm(alarm_id: str, body: ShelveRequest):
+    """Parkeer een alarm tot een tijdstip, met verplichte reden. Zonder beide is
+    het een alarm dat stil verdwijnt, en dat is precies wat alarmmanagement moet
+    voorkomen."""
+    db = STATE.get("db")
+    if db is None:
+        raise HTTPException(503, "engine not initialized")
+    try:
+        return A.shelve(db, alarm_id, body.reason, body.until, body.operator_id)
+    except ValueError as e:
+        raise HTTPException(404 if "unknown" in str(e) else 400, str(e))
+
+
+@app.get(f"{API}/line/live")
+def line_live():
+    """De L1-payload: fase, doseringen, vulling en kwaliteit, kant-en-klaar.
+    Alles wat de oude client zelf afleidde (lijnsnelheid, packs-target,
+    totaalcharge, pallets) komt hiervandaan."""
+    db = STATE.get("db")
+    if db is None:
+        raise HTTPException(503, "engine not initialized")
+    return L.live(db, K.load_factory_model())
+
+
+@app.get(f"{API}/kpi/summary")
+def get_kpi_summary(window: str = Query(default="week"),
+                    compare: bool = Query(default=True)):
+    """PR-36/38: de KPI-set over een venster, met norm-status, delta tegen het
+    vorige venster en het verliesblok. Scherm 11 en 12 lezen hieruit.
+
+    Bewust een `window` in plaats van `days`: een dienst is niet in dagen uit
+    te drukken en week-op-week is geen 7 dagen vanaf nu. De respons stuurt
+    `from`, `to` en de tijdzone mee, zodat het PDF hetzelfde venster kan
+    aantonen als het scherm."""
+    db = STATE.get("db")
+    if db is None:
+        raise HTTPException(503, "engine not initialized")
+    try:
+        return JSONResponse(K.summary(db, window=window, compare=compare))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @app.get(f"{API}/report/period")
-def get_period_report(days: int = Query(default=7), format: str = Query(default="json")):
-    """PR-22: plant-wide management report over the last `days` days.
+def get_period_report(days: int = Query(default=7),
+                      window: str | None = Query(default=None),
+                      format: str = Query(default="json")):
+    """PR-22: plant-wide management report.
+
+    Two ways to pick the period, and `window` wins: `window=shift|day|week|month`
+    uses exactly the same bounds as GET /kpi/summary, `days=N` is the older
+    rolling window that the report centre still offers.
+
+    The window parameter exists because the management screen let you pick a
+    period and then asked for `days=7` regardless — see assemble_period_report.
+
     NOTE: this literal route MUST stay ahead of GET /report/{batch_id}
     below, otherwise FastAPI matches "period" as a batch_id path param."""
     db = STATE.get("db")
     if db is None:
         raise HTTPException(503, "engine not initialized")
-    rep = assemble_period_report(db, days)
+    try:
+        rep = assemble_period_report(db, days=days, window=window)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     if format == "pdf":
         pdf = render_period_pdf(rep)
         media = "application/pdf" if pdf[:4] == b"%PDF" else "text/plain"

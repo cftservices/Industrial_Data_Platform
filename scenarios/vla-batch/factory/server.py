@@ -32,6 +32,11 @@ from asyncua import Server, ua
 from asyncua.common.methods import uamethod
 
 from physics import VlaProcess, RECIPES
+# AREA_TAGS + SETPOINT_TARGETS are GENERATED from factory-model/isa95-vla.json by
+# tools/gen-connect.py. They used to be hand-maintained here and in three other
+# places, which is how the four dose_*_setpoint_kg tags ended up in the address
+# space but never in the MonsterMQ ingest list. Edit the model, run the generator.
+from _generated_tags import AREA_TAGS, SETPOINT_TARGETS
 
 log = logging.getLogger("vla-factory")
 logging.basicConfig(
@@ -47,59 +52,6 @@ ENDPOINT = os.environ.get("OPCUA_ENDPOINT", "opc.tcp://0.0.0.0:4840/DairyWorks")
 WRITE_INTERVAL = float(os.environ.get("WRITE_INTERVAL", "0.5"))
 TICK_INTERVAL = float(os.environ.get("TICK_INTERVAL", "0.2"))
 AUTOSTART_RECIPE = os.environ.get("AUTOSTART_RECIPE") or None
-
-# ISA-95 tag map (LOCK — exact browsenames + OPC-UA types) per contract §ISA-95.
-# tuple: (tag, VariantType, writable)
-AREA_TAGS: dict[tuple[str, str], list[tuple[str, ua.VariantType, bool]]] = {
-    ("Receiving", "receiving-tank-01"): [
-        ("level_L", ua.VariantType.Double, False),
-        ("temp_C", ua.VariantType.Double, False),
-        ("fat_setpoint_pct", ua.VariantType.Double, True),
-    ],
-    ("Mixing", "process-tank-01"): [
-        ("level_L", ua.VariantType.Double, False),
-        ("temp_C", ua.VariantType.Double, False),
-        ("agitator_rpm", ua.VariantType.Double, True),
-        ("dose_milk_actual_kg", ua.VariantType.Double, False),
-        ("dose_sugar_actual_kg", ua.VariantType.Double, False),
-        ("dose_starch_actual_kg", ua.VariantType.Double, False),
-        ("dose_cocoa_actual_kg", ua.VariantType.Double, False),
-        ("phase", ua.VariantType.String, False),
-        ("dose_milk_setpoint_kg", ua.VariantType.Double, True),
-        ("dose_sugar_setpoint_kg", ua.VariantType.Double, True),
-        ("dose_starch_setpoint_kg", ua.VariantType.Double, True),
-        ("dose_cocoa_setpoint_kg", ua.VariantType.Double, True),
-    ],
-    ("Cook", "cook-unit-01"): [
-        ("temp_C", ua.VariantType.Double, False),
-        ("setpoint_C", ua.VariantType.Double, True),
-        ("hold_sec", ua.VariantType.Double, True),
-        ("hold_elapsed_sec", ua.VariantType.Double, False),
-        ("viscosity_cP", ua.VariantType.Double, False),
-    ],
-    ("Cooling", "cooler-01"): [
-        ("temp_C", ua.VariantType.Double, False),
-        ("target_C", ua.VariantType.Double, True),
-    ],
-    ("Filling", "filler-01"): [
-        ("packs_total", ua.VariantType.Int64, False),
-        ("reject_count", ua.VariantType.Int64, False),
-        ("pack_size_L", ua.VariantType.Double, False),
-    ],
-}
-
-# how a writable status/setpoint node maps to a SetSetpoint target string
-SETPOINT_TARGETS: dict[tuple[str, str, str], str] = {
-    ("Receiving", "receiving-tank-01", "fat_setpoint_pct"): "receiving.fat",
-    ("Mixing", "process-tank-01", "agitator_rpm"): "mixing.agitator_rpm",
-    ("Mixing", "process-tank-01", "dose_milk_setpoint_kg"): "dose.milk",
-    ("Mixing", "process-tank-01", "dose_sugar_setpoint_kg"): "dose.sugar",
-    ("Mixing", "process-tank-01", "dose_starch_setpoint_kg"): "dose.starch",
-    ("Mixing", "process-tank-01", "dose_cocoa_setpoint_kg"): "dose.cocoa",
-    ("Cook", "cook-unit-01", "setpoint_C"): "cook.setpoint_C",
-    ("Cook", "cook-unit-01", "hold_sec"): "cook.hold_sec",
-    ("Cooling", "cooler-01", "target_C"): "cooler.target_C",
-}
 
 # nodes that mirror a live process setpoint (so the browsed value stays truthful)
 SETPOINT_READBACK = {

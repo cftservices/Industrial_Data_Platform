@@ -63,47 +63,21 @@ SITE = "DairyWorks"
 LINE = "Vla"
 
 # ---------------------------------------------------------------------------
-# Tag -> OPC-UA node-id mapping (LOCK — exact copy of the ISA-95 table in the
-# build contract). Each entry: (Area, Equipment, tag, unit).
+# Tag -> OPC-UA node-id mapping. Each entry: (Area, Equipment, tag, unit).
 # The node-id is always  ns=2;s=DairyWorks.Vla.{Area}.{Equipment}.{tag}.
 # The UNS Status topic is  {UNS_ROOT}/{Area}/{Equipment}/Status/{tag}.
+#
+# GENERATED from factory-model/isa95-vla.json by tools/gen-connect.py. This used
+# to be a hand-kept "exact copy of the ISA-95 table", and it silently stopped
+# being exact: the four dose_*_setpoint_kg tags were missing here and in the
+# MonsterMQ ingest list, so the target half of every dose pair never reached the
+# UNS. Edit the model, then run the generator.
 # ---------------------------------------------------------------------------
-STATUS_TAGS: list[tuple[str, str, str, str]] = [
-    # Receiving
-    ("Receiving", "receiving-tank-01", "level_L", "L"),
-    ("Receiving", "receiving-tank-01", "temp_C", "C"),
-    ("Receiving", "receiving-tank-01", "fat_setpoint_pct", "%"),
-    # Mixing
-    ("Mixing", "process-tank-01", "level_L", "L"),
-    ("Mixing", "process-tank-01", "temp_C", "C"),
-    ("Mixing", "process-tank-01", "agitator_rpm", "rpm"),
-    ("Mixing", "process-tank-01", "dose_milk_actual_kg", "kg"),
-    ("Mixing", "process-tank-01", "dose_sugar_actual_kg", "kg"),
-    ("Mixing", "process-tank-01", "dose_starch_actual_kg", "kg"),
-    ("Mixing", "process-tank-01", "dose_cocoa_actual_kg", "kg"),
-    ("Mixing", "process-tank-01", "phase", ""),
-    # Cook
-    ("Cook", "cook-unit-01", "temp_C", "C"),
-    ("Cook", "cook-unit-01", "setpoint_C", "C"),
-    ("Cook", "cook-unit-01", "hold_sec", "s"),
-    ("Cook", "cook-unit-01", "hold_elapsed_sec", "s"),
-    ("Cook", "cook-unit-01", "viscosity_cP", "cP"),
-    # Cooling
-    ("Cooling", "cooler-01", "temp_C", "C"),
-    ("Cooling", "cooler-01", "target_C", "C"),
-    # Filling
-    ("Filling", "filler-01", "packs_total", ""),
-    ("Filling", "filler-01", "reject_count", ""),
-    ("Filling", "filler-01", "pack_size_L", "L"),
-]
-
-# Line-level Batch status tags. UNS topic: {UNS_ROOT}/Batch/Status/{tag}.
-# Node-id: ns=2;s=DairyWorks.Vla.Batch.{tag}
-BATCH_TAGS: list[tuple[str, str]] = [
-    ("state", ""),
-    ("batch_id", ""),
-    ("active_recipe", ""),
-]
+from _generated_tags import (  # noqa: E402
+    BATCH_TAGS,
+    EQUIP_SETPOINT_TARGET,
+    STATUS_TAGS,
+)
 
 
 def node_id_for(area: str, equipment: str, tag: str) -> str:
@@ -145,17 +119,8 @@ def iso_now() -> str:
 # ---------------------------------------------------------------------------
 
 # (Area, Equipment, cmd) -> SetSetpoint target string.
-EQUIP_SETPOINT_TARGET: dict[tuple[str, str, str], str] = {
-    ("Receiving", "receiving-tank-01", "fat_setpoint_pct"): "receiving.fat",
-    ("Mixing", "process-tank-01", "agitator_rpm"): "mixing.agitator_rpm",
-    ("Mixing", "process-tank-01", "dose_milk_setpoint_kg"): "dose.milk",
-    ("Mixing", "process-tank-01", "dose_sugar_setpoint_kg"): "dose.sugar",
-    ("Mixing", "process-tank-01", "dose_starch_setpoint_kg"): "dose.starch",
-    ("Mixing", "process-tank-01", "dose_cocoa_setpoint_kg"): "dose.cocoa",
-    ("Cook", "cook-unit-01", "setpoint_C"): "cook.setpoint_C",
-    ("Cook", "cook-unit-01", "hold_sec"): "cook.hold_sec",
-    ("Cooling", "cooler-01", "target_C"): "cooler.target_C",
-}
+# EQUIP_SETPOINT_TARGET is imported from _generated_tags above (same source of
+# truth as STATUS_TAGS: the command_target field on each writable model tag).
 
 
 class CommandJob:

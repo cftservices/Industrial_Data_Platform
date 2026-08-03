@@ -1,15 +1,33 @@
 # Vla Batch v2 — VPS deploy-checklist
 
-> Doel: de vla-batch demo live op één beveiligde URL, op een goedkope Ubuntu VPS (~2 GB).
+> Doel: de vla-batch demo live op één beveiligde URL, op een goedkope Ubuntu VPS.
 > Stack = slim-base (`docker-compose.slim.yml`) + overlay (`scenarios/vla-batch/docker-compose.vla.yml`).
 > Helper-script: [`deploy.sh`](deploy.sh) (`up` / `verify` / `smoke` / `fallback` / `logs` / `down`).
 > Architectuur: fabriek-als-OPC-UA → **MonsterMQ native OPC-UA-client** (ingest) → UNS → MongoDB + TDengine → Grafana/BIRT/dashboard. Zie [`README.md`](README.md).
 
 ---
 
+## Geheugenbudget per profiel
+
+Dit document beloofde eerder "~2 GB" terwijl `vla-ollama` (4 GB) en `vla-tdgpt`
+(1,5 GB) zonder profile in de compose stonden. Die belofte klopte alleen zolang
+je die containers niet startte. Sinds de opt-in profiles klopt de tabel wel.
+
+| Profiel | Commando | Extra containers | Gedeclareerd `mem_limit` | Advies RAM |
+|---|---|---|---|---|
+| **basis** | `docker compose ... up -d` | fabriek, batch-engine, TDengine, bridge, dashboard, UI, Grafana + slim-base | ~1,4 GB | **2 GB** (4 GB comfortabeler) |
+| **+ ai** | `--profile ai` | `vla-ollama` (4 GB), `vla-tdgpt` (1,5 GB), `vla-ai` | ~7,2 GB | **8 GB** |
+| **+ vendor** | `--profile vendor` | 6 leverancierseilanden (OPC-DA, OPC-UA) + conditioner | ~1,9 GB | **4 GB** |
+| **+ vendor-sql** | `--profile vendor-sql` | SQL Server-eiland + gateway (3 IT-systemen) | ~3,1 GB | **6 GB** |
+
+Profielen stapelen: `--profile vendor --profile vendor-sql` draait beide.
+Zonder profile-vlag krijg je exact de demo van vandaag, ongewijzigd.
+
+---
+
 ## 0. Vooraf (eenmalig)
 
-- [ ] **VPS**: Ubuntu 22.04/24.04, ≥ 2 GB RAM (TDengine + 8 containers; 4 GB comfortabeler), ≥ 20 GB disk.
+- [ ] **VPS**: Ubuntu 22.04/24.04, ≥ 20 GB disk. RAM volgens de profieltabel hierboven: 2 GB voor de basis-stack, meer zodra je `--profile ai` of `--profile vendor` gebruikt.
 - [ ] **Docker + Compose v2**:
       ```bash
       curl -fsSL https://get.docker.com | sh
@@ -135,3 +153,64 @@ bezet (legacy mosquitto), gebruik dan de extra overlay
 | Dashboard | `https://milkdemo.<domain>` (basic-auth) |
 | Grafana | `https://grafana.<domain>` |
 | batch-engine / factory / TDengine / MonsterMQ | intern op `idp-network` (niet publiek) |
+
+---
+
+## Cutover naar de Next.js-UI (`vla-ui`)
+
+De nieuwe UI draait bewust **naast** de oude SPA, zodat de demo blijft werken.
+Drie gescheiden stappen, elk apart verifieerbaar.
+
+### Stap 1: de middleware-verhuizing (doe dit eerst en apart)
+
+`milkdemo-auth` werd gedefinieerd op `vla-dashboard`, de service die straks
+verdwijnt, terwijl Grafana ernaar verwijst. Traefik leest labels alleen van
+containers met `traefik.enable=true`, dus **verdwijnt die service, dan valt
+Grafana om.** De definitie staat nu bij `grafana`, die elke dashboardwissel
+overleeft.
+
+In dezelfde wijziging kwam de same-origin embed-route erbij
+(`Host(milkdemo) && PathPrefix(/grafana)`), plus `serve_from_sub_path` en
+`allow_embedding`. `GF_AUTH_ANONYMOUS_ENABLED` blijft **uit**: een anonieme
+bezoeker is Viewer, en een Viewer mag via de HTTP-API willekeurige queries naar
+elke datasource sturen. Dat zou de complete historian publiek queryable maken.
+
+```bash
+docker compose -f docker-compose.slim.yml \
+               -f scenarios/vla-batch/docker-compose.vla.yml up -d grafana vla-dashboard
+
+# Verifieer VOORDAT je verder gaat:
+curl -sk -o /dev/null -w '%{http_code}\n' https://grafana.${DOMAIN}/api/health          # 401
+curl -sku "$USER:$PASS" -o /dev/null -w '%{http_code}\n' https://grafana.${DOMAIN}/api/health   # 200
+curl -sku "$USER:$PASS" -o /dev/null -w '%{http_code}\n' https://milkdemo.${DOMAIN}/grafana/api/health  # 200
+```
+
+Combineer `serve_from_sub_path` niet met een prefix-strip in de proxy: die twee
+doen hetzelfde werk dubbel en geven redirect-loops of 404's op statische assets.
+Test daarna zowel een `d-solo`-iframe als `/grafana/api/live/`.
+
+### Stap 2: `vla-ui` ernaast
+
+```bash
+docker compose -f docker-compose.slim.yml \
+               -f scenarios/vla-batch/docker-compose.vla.yml up -d --build vla-ui
+
+curl -sku "$USER:$PASS" https://milkdemo-next.${DOMAIN}/api/ui/model | head -c 200
+```
+
+De `/api`-proxy die nginx deed zit nu in `app/api/v1/[...path]/route.ts`,
+inclusief de 60 s timeout die de PDF-renders nodig hebben en het ongewijzigd
+doorgeven van de gestructureerde weigeringen. De oude SPA blijft draaien op
+`milkdemo.${DOMAIN}`.
+
+Loop de elf routes na: `/`, `/?view=sales`, `/management`, `/line`, `/alarms`,
+`/batches`, `/equipment`, `/reports`, `/analyse`, `/scada`, `/shopfloor`.
+
+### Stap 3: omschakelen
+
+Laat de `milkdemo`-router naar `vla-ui` wijzen en schrap `vla-dashboard`.
+Rollback is een `git revert` plus `docker compose up -d`.
+
+**Voor de omschakeling nog even nalopen:** draait er een curl-loop op Grafana
+tijdens de hele operatie zonder een enkele non-2xx, en is `NEXT_PUBLIC_GRAFANA_PATH`
+gezet op een dashboard dat bestaat (`/grafana/d/vla-line?kiosk`).
