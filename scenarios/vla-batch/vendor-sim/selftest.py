@@ -102,6 +102,29 @@ check("7. source-systems.json is internally consistent",
       f"{len(systems)} system(s), {len(seen_native)} native points"
       + ("" if not problems else " | " + "; ".join(problems)))
 
+# ---------------------------------------------------------------------------
+# 7b. EVERY point must be encodable. This is the check that would have caught
+#     the missing L -> gal conversion at build time instead of at runtime, where
+#     it took a whole island down on its first scan.
+# ---------------------------------------------------------------------------
+sys.path.insert(0, str(HERE / "lib"))
+from lib.point import Point  # noqa: E402
+
+encode_errors: list[str] = []
+for s in systems:
+    for p in s["points"]:
+        point = Point(p)
+        try:
+            value, _ = point.value({point.source_path: 50.0} if point.source_path else {}, 1.0)
+            point.native_int(value)
+            point.native_float(value)
+        except Exception as ex:
+            encode_errors.append(f"{s['equipment_id']}/{p['native']}: {ex}")
+check("7b. every native point can be derived and encoded",
+      not encode_errors,
+      f"{sum(len(s['points']) for s in systems)} points across {len(systems)} systems"
+      + ("" if not encode_errors else " | " + "; ".join(encode_errors)))
+
 check("8. raw root stays out of the UNS",
       doc["raw_root"] == "raw/vla" and not doc["raw_root"].startswith("DairyWorks"),
       f"raw_root={doc['raw_root']} (DairyWorks/# is archived, so raw must not live there)")

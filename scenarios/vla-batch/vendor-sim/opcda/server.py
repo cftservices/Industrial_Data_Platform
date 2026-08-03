@@ -38,7 +38,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from lib.distortion import Distorter, encode_native  # noqa: E402
+from lib.point import Point  # noqa: E402
 from lib.process_tap import ProcessTap  # noqa: E402
 
 log = logging.getLogger("vendor-opcda")
@@ -75,57 +75,6 @@ PROTOCOL = "OPC_DA"
 # exists, which is exactly why an unmodelled tag is worthless.
 Q_GOOD, Q_UNCERTAIN, Q_BAD = 192, 64, 0
 
-# Which canonical unit each canonical tag is expressed in. Needed to convert
-# into the vendor's unit. Derived from the tag-name suffix, which is the house
-# convention (06-Model B.2b: the unit is a suffix on the name).
-UNIT_BY_SUFFIX = {
-    "_C": "C", "_L_min": "L/min", "_kg": "kg", "_bar": "bar",
-    "_pct": "%", "_rpm": "rpm", "_sec": "s", "_cP": "cP", "_L": "L",
-}
-
-
-def canonical_unit(tag_id: str) -> str:
-    tag = tag_id.split(":", 1)[1]
-    for suffix, unit in sorted(UNIT_BY_SUFFIX.items(), key=lambda kv: -len(kv[0])):
-        if tag.endswith(suffix):
-            return unit
-    return ""
-
-
-class Point:
-    """One native ItemID plus its companion quality item."""
-
-    __slots__ = ("native", "cfg", "distorter", "canon_unit", "node", "q_node")
-
-    def __init__(self, cfg: dict) -> None:
-        self.native = cfg["native"]
-        self.cfg = cfg
-        self.distorter = Distorter(cfg["native"], cfg.get("distortion") or {})
-        self.canon_unit = canonical_unit(cfg["canonical_tag_id"])
-        self.node = None
-        self.q_node = None
-
-    @property
-    def source_path(self) -> str | None:
-        return (self.cfg.get("distortion") or {}).get("source")
-
-    def read(self, truth: dict[str, float | None], dt: float) -> tuple[int | None, int]:
-        """Return (scaled integer value, DA quality word)."""
-        src = self.source_path
-        raw_truth = truth.get(src) if src else None
-        value = self.distorter.apply(raw_truth, dt)
-        if value is None:
-            # No reading. A real DA server holds the last value and flags it.
-            return None, Q_BAD if raw_truth is None else Q_UNCERTAIN
-        scaled = encode_native(
-            value,
-            native_unit=self.cfg.get("native_unit", ""),
-            canonical_unit=self.canon_unit,
-            native_scale=float(self.cfg.get("native_scale", 1) or 1),
-        )
-        return scaled, Q_GOOD
-
-
 class DATunnel:
     def __init__(self, systems: list[dict]) -> None:
         self.systems = systems
@@ -139,6 +88,17 @@ class DATunnel:
 
     def source_paths(self) -> list[str]:
         return [p.source_path for p in self.points if p.source_path]
+
+    @staticmethod
+    def read_point(pt: Point, truth: dict) -> tuple[int | None, int]:
+        """Derive one item and map its condition onto the DA quality word."""
+        value, saw_process = pt.value(truth, PROCESS_DT)
+        if value is None:
+            # A real DA server holds its last value and flags it rather than
+            # going silent. BAD means the field connection is gone; UNCERTAIN
+            # means the instrument answered but the reading is not trustworthy.
+            return None, Q_BAD if not saw_process else Q_UNCERTAIN
+        return pt.native_int(value), Q_GOOD
 
     async def build(self, server) -> None:
         from asyncua import ua
@@ -170,7 +130,7 @@ class DATunnel:
         while True:
             truth = tap.truth()
             for pt in self.points:
-                value, quality = pt.read(truth, PROCESS_DT)
+                value, quality = self.read_point(pt, truth)
                 if value is not None:
                     # No SourceTimestamp on purpose: a DA item does not carry one,
                     # so a consumer only ever learns when the VALUE WAS RECEIVED,

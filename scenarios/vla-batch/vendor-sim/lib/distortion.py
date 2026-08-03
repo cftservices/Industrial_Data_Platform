@@ -47,6 +47,7 @@ def bar_to_psi(bar: float) -> float:
 
 CONVERT = {
     ("C", "degF"): c_to_f,
+    ("L", "gal"): lambda litres: litres / LITRE_PER_GALLON,
     ("L/min", "gal/min"): lmin_to_galmin,
     ("kg", "lbs"): kg_to_lbs,
     ("bar", "psi"): bar_to_psi,
@@ -70,7 +71,7 @@ class Distorter:
     ticks; building a fresh Distorter every tick would silently disable the lag.
     """
 
-    __slots__ = ("cfg", "_rng", "_lagged", "_frozen_at", "name")
+    __slots__ = ("cfg", "_rng", "_lagged", "_frozen_at", "_prev_src", "name")
 
     def __init__(self, name: str, cfg: dict, seed: int | None = None) -> None:
         self.name = name
@@ -80,6 +81,7 @@ class Distorter:
         self._rng = random.Random(seed if seed is not None else hash(name) & 0xFFFFFFFF)
         self._lagged: float | None = None
         self._frozen_at: float | None = None
+        self._prev_src: float | None = None
 
     # -- the synthetic modes -------------------------------------------------
     def _threshold_below(self, truth: float) -> float:
@@ -96,6 +98,53 @@ class Distorter:
             return 0.0
         base = float(self.cfg.get("base", 0.0))
         return base + self._rng.gauss(0.0, float(self.cfg.get("noise_sigma", 0.0)))
+
+    def _constant(self) -> float:
+        """A reading that does not follow the batch at all.
+
+        Utilities (CIP sets, chillers, compressors) run on their own schedule.
+        Forcing them to track batch state would be a lie that makes the demo
+        look tidier than a real plant is.
+        """
+        base = float(self.cfg.get("base", 0.0))
+        sigma = float(self.cfg.get("noise_sigma", 0.0))
+        return base + (self._rng.gauss(0.0, sigma) if sigma else 0.0)
+
+    def _rate_of(self, truth: float, dt: float) -> float:
+        """Rate of change of the source: what a flow meter actually measures.
+
+        A flow meter does not read a level, it reads how fast the level moves.
+        Modelling it as a derivative rather than a scaled copy is what makes the
+        totaliser conflict downstream honest instead of arranged.
+        """
+        prev = self._lagged
+        self._lagged = truth
+        if prev is None or dt <= 0:
+            return 0.0
+        rate = (truth - prev) / dt
+        if self.cfg.get("abs", True):
+            rate = abs(rate)
+        rate *= float(self.cfg.get("gain", 1.0))
+        sigma = float(self.cfg.get("noise_sigma", 0.0))
+        return max(0.0, rate + (self._rng.gauss(0.0, sigma) if sigma else 0.0))
+
+    def _integrate_increases(self, truth: float, dt: float) -> float:
+        """Running total of everything that flowed IN. A goods-receipt totaliser.
+
+        Only positive deltas count, because a silo draining into the process is
+        not milk arriving from a truck. The gain carries the meter's calibration
+        error, which is why this number and the line's own view of how much milk
+        arrived will never quite agree. That argument is a real one in real
+        plants, and it is usually settled by whoever shouts loudest rather than
+        by knowing which meter is of record.
+        """
+        prev = self._prev_src
+        self._prev_src = truth
+        if self._lagged is None:
+            self._lagged = float(self.cfg.get("start", 0.0))
+        if prev is not None and truth > prev:
+            self._lagged += (truth - prev) * float(self.cfg.get("gain", 1.0))
+        return self._lagged
 
     # -- the default analogue path ------------------------------------------
     def _analogue(self, truth: float, dt: float) -> float:
@@ -141,9 +190,15 @@ class Distorter:
                 return self._frozen_at
 
         mode = self.cfg.get("mode")
-        if mode == "threshold_below":
+        if mode == "constant":
+            value = self._constant()
+        elif mode == "threshold_below":
             return self._threshold_below(truth)
-        if mode == "flow_when_hot":
+        elif mode == "rate_of":
+            value = self._rate_of(truth, dt)
+        elif mode == "integrate_increases":
+            value = self._integrate_increases(truth, dt)
+        elif mode == "flow_when_hot":
             value = self._flow_when_hot(truth)
         else:
             value = self._analogue(truth, dt)

@@ -41,7 +41,6 @@
     "modern the protocol underneath is."
   ],
   "anonymization": "Generic archetypes only. Vendor tokens are vendor-a..vendor-f. No real manufacturer names, model numbers, IP addresses, network paths or vendor schemas anywhere in this file or in anything generated from it (PR-15).",
-
   "distortion_units_note": [
     "Every number inside a 'distortion' block is in the CANONICAL (SI) unit of the",
     "target tag, never in the vendor's unit. So 'offset: 0.8' on a *_C tag is 0.8",
@@ -52,7 +51,6 @@
     "plausible and is wrong by a factor of 3.8, which is precisely the class of bug",
     "this whole demo is about."
   ],
-
   "protocols": {
     "OPC_DA": {
       "label": "OPC-DA via a DA/UA tunneller",
@@ -72,10 +70,13 @@
         "Say this out loud in the demo. Claiming a DCOM implementation is exactly the",
         "kind of thing the audience you want to convince will check."
       ],
-      "quality_word": { "192": "GOOD", "64": "UNCERTAIN", "0": "BAD" }
+      "quality_word": {
+        "192": "GOOD",
+        "64": "UNCERTAIN",
+        "0": "BAD"
+      }
     }
   },
-
   "source_systems": [
     {
       "id": "SRC-PAST-01",
@@ -108,7 +109,6 @@
       "native_timestamp": "none",
       "native_quality": "da-quality-word",
       "enabled": true,
-
       "the_conflict": [
         "This skid and the line PLC measure the same fluid at the same moment, and",
         "they disagree. The vendor RTD sits further down the hold tube, reads about",
@@ -133,7 +133,6 @@
         "second while the island scans at 1 Hz. That spike is a sampling artefact of",
         "the acceleration, not the conflict. Do not put it on a slide."
       ],
-
       "points": [
         {
           "native": "Ch1.Dev2.TT_3001_PV",
@@ -143,7 +142,12 @@
           "native_scale": 0.1,
           "canonical_tag_id": "pasteuriser-01:temp_in_C",
           "condition_rule": "R-PAST-TEMP-IN",
-          "distortion": { "source": "Mixing/process-tank-01/temp_C", "offset": -0.4, "lag_s": 1.0, "noise_sigma": 0.2 }
+          "distortion": {
+            "source": "Mixing/process-tank-01/temp_C",
+            "offset": -0.4,
+            "lag_s": 1.0,
+            "noise_sigma": 0.2
+          }
         },
         {
           "native": "Ch1.Dev2.TT_3002_PV",
@@ -153,7 +157,12 @@
           "native_scale": 0.1,
           "canonical_tag_id": "pasteuriser-01:temp_out_C",
           "condition_rule": "R-PAST-TEMP-OUT",
-          "distortion": { "source": "Cook/cook-unit-01/temp_C", "offset": -0.3, "lag_s": 3.0, "noise_sigma": 0.2 }
+          "distortion": {
+            "source": "Cook/cook-unit-01/temp_C",
+            "offset": -0.3,
+            "lag_s": 3.0,
+            "noise_sigma": 0.2
+          }
         },
         {
           "native": "Ch1.Dev2.TT_3003_PV",
@@ -164,7 +173,12 @@
           "canonical_tag_id": "pasteuriser-01:hold_temp_C",
           "condition_rule": "R-PAST-HOLD-TEMP",
           "cross_check": "XC-COOK-TEMP",
-          "distortion": { "source": "Cook/cook-unit-01/temp_C", "offset": 0.8, "lag_s": 2.0, "noise_sigma": 0.15 }
+          "distortion": {
+            "source": "Cook/cook-unit-01/temp_C",
+            "offset": 0.8,
+            "lag_s": 2.0,
+            "noise_sigma": 0.15
+          }
         },
         {
           "native": "Ch1.Dev2.ZV_3004_ST",
@@ -174,7 +188,11 @@
           "native_scale": 1,
           "canonical_tag_id": "pasteuriser-01:divert_position",
           "condition_rule": "R-PAST-DIVERT",
-          "distortion": { "source": "Cook/cook-unit-01/temp_C", "mode": "threshold_below", "threshold": 72.0 }
+          "distortion": {
+            "source": "Cook/cook-unit-01/temp_C",
+            "mode": "threshold_below",
+            "threshold": 72.0
+          }
         },
         {
           "native": "Ch1.Dev2.FT_3006_PV",
@@ -184,7 +202,537 @@
           "native_scale": 0.1,
           "canonical_tag_id": "pasteuriser-01:flow_L_min",
           "condition_rule": "R-PAST-FLOW",
-          "distortion": { "source": "Cook/cook-unit-01/temp_C", "mode": "flow_when_hot", "threshold": 60.0, "base": 350.0, "noise_sigma": 5.0 }
+          "distortion": {
+            "source": "Cook/cook-unit-01/temp_C",
+            "mode": "flow_when_hot",
+            "threshold": 60.0,
+            "base": 350.0,
+            "noise_sigma": 5.0
+          }
+        }
+      ]
+    },
+    {
+      "id": "SRC-INTK-01",
+      "equipment_id": "intake-skid-01",
+      "area": "Receiving",
+      "archetype": "raw-intake-metering-skid",
+      "vendor": "vendor-a",
+      "description": "Truck-bay mass-flow meter with totaliser at raw milk reception. Goods receipt lives here, not on the line.",
+      "raw_prefix": "intake-skid-01",
+      "expected_interval_s": 1,
+      "protocol": "OPC_DA",
+      "transport": "da-ua-tunneller",
+      "endpoint": "opc.tcp://vla-vendor-opcda:4843/DATunnel",
+      "opcua_namespace_uri": "urn:datunnel",
+      "opcua_namespace_index": 2,
+      "ingest": "monstermq-opcua",
+      "device_name": "vendor-da",
+      "native_timestamp": "none",
+      "native_quality": "da-quality-word",
+      "enabled": true,
+      "the_conflict": [
+        "CONFLICT 1. This totaliser and the line's own receiving-tank-01/level_L both",
+        "answer 'how much milk arrived', and they land about 1.5% apart because the",
+        "meter carries a calibration error.",
+        "",
+        "That is a goods-receipt number against a process number. In a real plant the",
+        "argument gets settled by whoever is most senior in the room, because nothing",
+        "records which meter is of record for which question. The Model step makes",
+        "that designation explicit instead of political."
+      ],
+      "points": [
+        {
+          "native": "Ch1.Dev1.FT_4021_PV",
+          "description": "intake mass flow",
+          "datatype": "Int32",
+          "native_unit": "gal/min",
+          "native_scale": 0.1,
+          "canonical_tag_id": "intake-skid-01:flow_L_min",
+          "condition_rule": "R-INTK-FLOW",
+          "distortion": {
+            "source": "Receiving/receiving-tank-01/level_L",
+            "mode": "rate_of",
+            "gain": 60.0,
+            "noise_sigma": 0.4
+          }
+        },
+        {
+          "native": "Ch1.Dev1.FQ_4021_TOT",
+          "description": "intake totaliser, the goods-receipt number",
+          "datatype": "Int64",
+          "native_unit": "gal",
+          "native_scale": 1,
+          "canonical_tag_id": "intake-skid-01:volume_total_L",
+          "condition_rule": "R-INTK-TOTAL",
+          "distortion": {
+            "source": "Receiving/receiving-tank-01/level_L",
+            "mode": "integrate_increases",
+            "gain": 1.015,
+            "start": 0.0
+          },
+          "cross_check": "XC-INTAKE-VOLUME"
+        },
+        {
+          "native": "Ch1.Dev1.TT_4022_PV",
+          "description": "intake temperature",
+          "datatype": "Int32",
+          "native_unit": "degF",
+          "native_scale": 0.1,
+          "canonical_tag_id": "intake-skid-01:temp_C",
+          "condition_rule": "R-INTK-TEMP",
+          "distortion": {
+            "source": "Receiving/receiving-tank-01/temp_C",
+            "offset": -0.2,
+            "lag_s": 4.0,
+            "noise_sigma": 0.1
+          }
+        },
+        {
+          "native": "Ch1.Dev1.STS_4020",
+          "description": "device status bitfield, low-level bit",
+          "datatype": "Int32",
+          "native_unit": "",
+          "native_scale": 1,
+          "canonical_tag_id": "intake-skid-01:status_word",
+          "condition_rule": "R-INTK-STATUS",
+          "distortion": {
+            "source": "Receiving/receiving-tank-01/level_L",
+            "mode": "threshold_below",
+            "threshold": 500.0
+          }
+        }
+      ]
+    },
+    {
+      "id": "SRC-DOSE-01",
+      "equipment_id": "dosing-station-01",
+      "area": "Mixing",
+      "archetype": "gravimetric-dry-dosing-station",
+      "vendor": "vendor-c",
+      "description": "Certified load-cell weigh hopper for the dry ingredients. The legally relevant weight lives here.",
+      "raw_prefix": "dosing-station-01",
+      "expected_interval_s": 1,
+      "protocol": "OPC_DA",
+      "transport": "da-ua-tunneller",
+      "endpoint": "opc.tcp://vla-vendor-opcda:4843/DATunnel",
+      "opcua_namespace_uri": "urn:datunnel",
+      "opcua_namespace_index": 2,
+      "ingest": "monstermq-opcua",
+      "device_name": "vendor-da",
+      "native_timestamp": "none",
+      "native_quality": "da-quality-word",
+      "enabled": true,
+      "the_conflict": [
+        "CONFLICT 2, and this one decides what goes on a label. The line PLC publishes",
+        "process-tank-01/dose_starch_actual_kg, which is a flow-meter ESTIMATE. This",
+        "station is a certified scale and reads about 2% higher.",
+        "",
+        "The batch engine currently books the PLC number, silently, because it is the",
+        "only one it can see. Which number belongs in the batch record?",
+        "",
+        "Note WT_2101_MOTION: the weight is only valid when the hopper is NOT moving.",
+        "That is vendor quality semantics with no equivalent in any standard, and a",
+        "consumer that ignores it will book weights taken mid-swing."
+      ],
+      "points": [
+        {
+          "native": "Ch2.Dev1.WT_2101_NET",
+          "description": "net weight on the certified scale",
+          "datatype": "Int64",
+          "native_unit": "lbs",
+          "native_scale": 0.01,
+          "canonical_tag_id": "dosing-station-01:net_weight_kg",
+          "condition_rule": "R-DOSE-NET",
+          "distortion": {
+            "source": "Mixing/process-tank-01/dose_starch_actual_kg",
+            "gain": 1.02,
+            "noise_sigma": 0.05
+          },
+          "cross_check": "XC-STARCH-DOSE"
+        },
+        {
+          "native": "Ch2.Dev1.WT_2101_GRS",
+          "description": "gross weight including hopper tare",
+          "datatype": "Int64",
+          "native_unit": "lbs",
+          "native_scale": 0.01,
+          "canonical_tag_id": "dosing-station-01:gross_weight_kg",
+          "condition_rule": "R-DOSE-GROSS",
+          "distortion": {
+            "source": "Mixing/process-tank-01/dose_starch_actual_kg",
+            "gain": 1.02,
+            "offset": 45.0,
+            "noise_sigma": 0.05
+          }
+        },
+        {
+          "native": "Ch2.Dev1.WT_2101_TAR",
+          "description": "hopper tare",
+          "datatype": "Int64",
+          "native_unit": "lbs",
+          "native_scale": 0.01,
+          "canonical_tag_id": "dosing-station-01:tare_kg",
+          "condition_rule": "R-DOSE-TARE",
+          "distortion": {
+            "mode": "constant",
+            "base": 45.0,
+            "noise_sigma": 0.0
+          }
+        },
+        {
+          "native": "Ch2.Dev1.WT_2101_MOTION",
+          "description": "scale-in-motion bit: weight is only valid when 0",
+          "datatype": "Int32",
+          "native_unit": "",
+          "native_scale": 1,
+          "canonical_tag_id": "dosing-station-01:in_motion",
+          "condition_rule": "R-DOSE-MOTION",
+          "distortion": {
+            "source": "Mixing/process-tank-01/dose_starch_actual_kg",
+            "mode": "threshold_below",
+            "threshold": 250.0
+          }
+        },
+        {
+          "native": "Ch2.Dev1.WT_2101_MATCODE",
+          "description": "material code (2 = modified starch)",
+          "datatype": "Int32",
+          "native_unit": "",
+          "native_scale": 1,
+          "canonical_tag_id": "dosing-station-01:material_code",
+          "condition_rule": "R-DOSE-MATCODE",
+          "distortion": {
+            "mode": "constant",
+            "base": 2.0,
+            "noise_sigma": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "id": "SRC-CHIL-01",
+      "equipment_id": "chiller-01",
+      "area": "Cooling",
+      "archetype": "glycol-chiller",
+      "vendor": "vendor-e",
+      "description": "Glycol chiller feeding the cooler. A utility on its own schedule, with a vendor alarm bitfield instead of a quality flag.",
+      "raw_prefix": "chiller-01",
+      "expected_interval_s": 5,
+      "protocol": "OPC_DA",
+      "transport": "da-ua-tunneller",
+      "endpoint": "opc.tcp://vla-vendor-opcda:4843/DATunnel",
+      "opcua_namespace_uri": "urn:datunnel",
+      "opcua_namespace_index": 2,
+      "ingest": "monstermq-opcua",
+      "device_name": "vendor-da",
+      "native_timestamp": "none",
+      "native_quality": "da-quality-word",
+      "enabled": true,
+      "points": [
+        {
+          "native": "Ch2.Dev2.TT_5101_SUP",
+          "description": "glycol supply temperature",
+          "datatype": "Int32",
+          "native_unit": "degF",
+          "native_scale": 0.1,
+          "canonical_tag_id": "chiller-01:glycol_supply_temp_C",
+          "condition_rule": "R-CHIL-SUP",
+          "distortion": {
+            "mode": "constant",
+            "base": 2.0,
+            "noise_sigma": 0.3
+          }
+        },
+        {
+          "native": "Ch2.Dev2.TT_5102_RET",
+          "description": "glycol return temperature",
+          "datatype": "Int32",
+          "native_unit": "degF",
+          "native_scale": 0.1,
+          "canonical_tag_id": "chiller-01:glycol_return_temp_C",
+          "condition_rule": "R-CHIL-RET",
+          "distortion": {
+            "source": "Cooling/cooler-01/temp_C",
+            "gain": 0.12,
+            "offset": 4.0,
+            "lag_s": 20.0,
+            "noise_sigma": 0.3
+          }
+        },
+        {
+          "native": "Ch2.Dev2.KW_5103_LOAD",
+          "description": "compressor load",
+          "datatype": "Int32",
+          "native_unit": "%",
+          "native_scale": 1,
+          "canonical_tag_id": "chiller-01:compressor_load_pct",
+          "condition_rule": "R-CHIL-LOAD",
+          "distortion": {
+            "source": "Cooling/cooler-01/temp_C",
+            "gain": 0.9,
+            "offset": 8.0,
+            "lag_s": 15.0,
+            "noise_sigma": 1.5
+          }
+        },
+        {
+          "native": "Ch2.Dev2.PT_5104_SUC",
+          "description": "suction pressure",
+          "datatype": "Int32",
+          "native_unit": "psi",
+          "native_scale": 0.1,
+          "canonical_tag_id": "chiller-01:suction_pressure_bar",
+          "condition_rule": "R-CHIL-SUC",
+          "distortion": {
+            "mode": "constant",
+            "base": 2.8,
+            "noise_sigma": 0.05
+          }
+        },
+        {
+          "native": "Ch2.Dev2.ALM_5105_WORD",
+          "description": "vendor alarm bitfield (b0 sensor fault, b1 defrost, b2 low pressure, b3 comm loss)",
+          "datatype": "Int32",
+          "native_unit": "",
+          "native_scale": 1,
+          "canonical_tag_id": "chiller-01:alarm_word",
+          "condition_rule": "R-CHIL-ALARM",
+          "distortion": {
+            "source": "Cooling/cooler-01/temp_C",
+            "mode": "threshold_below",
+            "threshold": 5.0
+          }
+        }
+      ]
+    },
+    {
+      "id": "SRC-HOMO-01",
+      "equipment_id": "homogeniser-01",
+      "area": "Mixing",
+      "archetype": "two-stage-high-pressure-homogeniser",
+      "vendor": "vendor-d",
+      "description": "Modern vendor skid with an impeccable OPC-UA server: real source timestamps, real StatusCodes, subscriptions. And still a silo.",
+      "raw_prefix": "homogeniser-01",
+      "expected_interval_s": 1,
+      "protocol": "OPC_UA",
+      "transport": "native",
+      "endpoint": "opc.tcp://vla-vendor-opcua:4842/VendorLine",
+      "opcua_namespace_uri": "urn:vendorline",
+      "opcua_namespace_index": 2,
+      "ingest": "monstermq-opcua",
+      "device_name": "vendor-ua",
+      "native_timestamp": "source-timestamp",
+      "native_quality": "opcua-statuscode",
+      "enabled": true,
+      "the_lesson": [
+        "This is the proof for 'OPC-UA is not the data layer'. Everything a vendor",
+        "sells as Industry 4.0 ready is here and correct: proper timestamps, proper",
+        "status codes, subscriptions, real doubles instead of scaled integers.",
+        "",
+        "And PT_1101_PV on ns=2 of urn:vendorline still means nothing to any consumer.",
+        "The protocol was never the problem. Modelling creates the value.",
+        "",
+        "Put this machine on the slide right after the protocol slide."
+      ],
+      "points": [
+        {
+          "native": "PT_1101_PV",
+          "description": "first-stage homogenising pressure",
+          "datatype": "Double",
+          "native_unit": "bar",
+          "native_scale": 1,
+          "canonical_tag_id": "homogeniser-01:pressure_stage1_bar",
+          "condition_rule": "R-HOMO-P1",
+          "distortion": {
+            "source": "Mixing/process-tank-01/agitator_rpm",
+            "gain": 2.4,
+            "offset": 10.0,
+            "lag_s": 3.0,
+            "noise_sigma": 1.5
+          }
+        },
+        {
+          "native": "PT_1102_PV",
+          "description": "second-stage homogenising pressure",
+          "datatype": "Double",
+          "native_unit": "bar",
+          "native_scale": 1,
+          "canonical_tag_id": "homogeniser-01:pressure_stage2_bar",
+          "condition_rule": "R-HOMO-P2",
+          "distortion": {
+            "source": "Mixing/process-tank-01/agitator_rpm",
+            "gain": 0.5,
+            "offset": 3.0,
+            "lag_s": 3.0,
+            "noise_sigma": 0.4
+          }
+        },
+        {
+          "native": "MTR_1101_SPD",
+          "description": "motor speed",
+          "datatype": "Double",
+          "native_unit": "rpm",
+          "native_scale": 1,
+          "canonical_tag_id": "homogeniser-01:motor_speed_rpm",
+          "condition_rule": "R-HOMO-SPD",
+          "distortion": {
+            "source": "Mixing/process-tank-01/agitator_rpm",
+            "gain": 24.0,
+            "lag_s": 2.0,
+            "noise_sigma": 8.0
+          }
+        },
+        {
+          "native": "MTR_1101_LOAD",
+          "description": "motor load",
+          "datatype": "Double",
+          "native_unit": "%",
+          "native_scale": 1,
+          "canonical_tag_id": "homogeniser-01:motor_load_pct",
+          "condition_rule": "R-HOMO-LOAD",
+          "distortion": {
+            "source": "Mixing/process-tank-01/agitator_rpm",
+            "gain": 0.85,
+            "offset": 12.0,
+            "lag_s": 2.0,
+            "noise_sigma": 1.0
+          }
+        },
+        {
+          "native": "TT_1103_PV",
+          "description": "product temperature after homogenising",
+          "datatype": "Double",
+          "native_unit": "C",
+          "native_scale": 1,
+          "canonical_tag_id": "homogeniser-01:product_temp_C",
+          "condition_rule": "R-HOMO-TEMP",
+          "distortion": {
+            "source": "Mixing/process-tank-01/temp_C",
+            "offset": 1.5,
+            "lag_s": 5.0,
+            "noise_sigma": 0.2
+          }
+        },
+        {
+          "native": "STS_1101",
+          "description": "vendor state enum (0 stopped .. 7 running)",
+          "datatype": "Int32",
+          "native_unit": "",
+          "native_scale": 1,
+          "canonical_tag_id": "homogeniser-01:state",
+          "condition_rule": "R-HOMO-STATE",
+          "distortion": {
+            "source": "Mixing/process-tank-01/agitator_rpm",
+            "mode": "threshold_below",
+            "threshold": 1.0
+          }
+        }
+      ]
+    },
+    {
+      "id": "SRC-CIP-01",
+      "equipment_id": "cip-station-01",
+      "area": "Utilities",
+      "archetype": "clean-in-place-skid",
+      "vendor": "vendor-e",
+      "description": "CIP set. Runs BETWEEN batches on its own schedule, which is exactly why forcing it to follow batch state would be dishonest.",
+      "raw_prefix": "cip-station-01",
+      "expected_interval_s": 10,
+      "protocol": "OPC_UA",
+      "transport": "native",
+      "endpoint": "opc.tcp://vla-vendor-opcua:4842/VendorLine",
+      "opcua_namespace_uri": "urn:vendorline",
+      "opcua_namespace_index": 2,
+      "ingest": "monstermq-opcua",
+      "device_name": "vendor-ua",
+      "native_timestamp": "source-timestamp",
+      "native_quality": "opcua-statuscode",
+      "enabled": true,
+      "points": [
+        {
+          "native": "CIP1.Phase",
+          "description": "CIP phase enum (0 idle, 1 prerinse, 2 caustic, 3 rinse, 4 acid, 5 final)",
+          "datatype": "Int32",
+          "native_unit": "",
+          "native_scale": 1,
+          "canonical_tag_id": "cip-station-01:phase",
+          "condition_rule": "R-CIP-PHASE",
+          "distortion": {
+            "mode": "constant",
+            "base": 0.0,
+            "noise_sigma": 0.0
+          }
+        },
+        {
+          "native": "CIP1.Cond_mS",
+          "description": "caustic conductivity",
+          "datatype": "Double",
+          "native_unit": "mS",
+          "native_scale": 1,
+          "canonical_tag_id": "cip-station-01:conductivity_mS",
+          "condition_rule": "R-CIP-COND",
+          "distortion": {
+            "mode": "constant",
+            "base": 48.2,
+            "noise_sigma": 0.6
+          }
+        },
+        {
+          "native": "CIP1.SupplyTemp_C",
+          "description": "CIP supply temperature",
+          "datatype": "Double",
+          "native_unit": "C",
+          "native_scale": 1,
+          "canonical_tag_id": "cip-station-01:supply_temp_C",
+          "condition_rule": "R-CIP-SUP",
+          "distortion": {
+            "mode": "constant",
+            "base": 75.0,
+            "noise_sigma": 0.8
+          }
+        },
+        {
+          "native": "CIP1.ReturnTemp_C",
+          "description": "CIP return temperature",
+          "datatype": "Double",
+          "native_unit": "C",
+          "native_scale": 1,
+          "canonical_tag_id": "cip-station-01:return_temp_C",
+          "condition_rule": "R-CIP-RET",
+          "distortion": {
+            "mode": "constant",
+            "base": 71.8,
+            "noise_sigma": 0.8
+          }
+        },
+        {
+          "native": "CIP1.Flow_m3h",
+          "description": "CIP circulation flow",
+          "datatype": "Double",
+          "native_unit": "m3/h",
+          "native_scale": 1,
+          "canonical_tag_id": "cip-station-01:flow_m3_h",
+          "condition_rule": "R-CIP-FLOW",
+          "distortion": {
+            "mode": "constant",
+            "base": 21.0,
+            "noise_sigma": 0.5
+          }
+        },
+        {
+          "native": "CIP1.ElapsedMin",
+          "description": "minutes into the current CIP phase",
+          "datatype": "Double",
+          "native_unit": "min",
+          "native_scale": 1,
+          "canonical_tag_id": "cip-station-01:elapsed_min",
+          "condition_rule": "R-CIP-ELAPSED",
+          "distortion": {
+            "mode": "constant",
+            "base": 0.0,
+            "noise_sigma": 0.0
+          }
         }
       ]
     }

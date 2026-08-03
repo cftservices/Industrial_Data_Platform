@@ -9,6 +9,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY lib ./lib
 COPY selftest.py ./
 COPY opcda ./opcda
+COPY opcua ./opcua
 
 # Which island this container serves is chosen by ISLAND at run time, so one
 # image covers every vendor simulator. Keeps the VPS footprint honest: the

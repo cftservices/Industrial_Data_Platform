@@ -147,6 +147,54 @@ services:
     networks:
       - idp-network
 
+  # ── VENDOR ISLAND: OPC-UA (profile "vendor") ─────────────────────────────
+  # The MODERN vendor skids, and the sharpest argument in the demo. Real source
+  # timestamps, real StatusCodes, real doubles, subscriptions: everything a
+  # vendor datasheet promises under "Industry 4.0 ready", all genuinely present.
+  #
+  # And PT_1101_PV on ns=2 of urn:vendorline still means nothing to any consumer.
+  # The DA island next door is worse in every technical respect, and after the
+  # Model step the two are equally useful. Protocol quality was never the gap.
+  vla-vendor-opcua:
+    profiles: ["vendor"]
+    build:
+      context: ./scenarios/vla-batch/vendor-sim
+      dockerfile: Dockerfile
+    image: techflow/vla-vendor-sim:latest
+    container_name: vla-vendor-opcua
+    restart: unless-stopped
+    environment:
+      ISLAND: opcua
+      ENDPOINT: "opc.tcp://0.0.0.0:4842/VendorLine"
+      OPCUA_ENDPOINT: "opc.tcp://vla-factory:4840/DairyWorks"
+      SOURCE_SYSTEMS: /model/source-systems.json
+      SCAN_INTERVAL: "1.0"
+      TIME_SCALE: "15.0"
+    volumes:
+      - ./scenarios/vla-batch/factory-model:/model:ro
+    depends_on:
+      vla-factory:
+        condition: service_started
+    mem_limit: 160m
+    networks:
+      - idp-network
+
+  vla-vendor-ua-init:
+    profiles: ["vendor"]
+    image: curlimages/curl:latest
+    container_name: vla-vendor-ua-init
+    restart: "no"
+    volumes:
+      - ./scenarios/vla-batch/monstermq-init:/init:ro
+    entrypoint: ["sh", "/init/init-vendor-ua.sh"]
+    depends_on:
+      monstermq:
+        condition: service_healthy
+      vla-vendor-opcua:
+        condition: service_started
+    networks:
+      - idp-network
+
   # ── VLA CONNECTOR (OPTIONAL FALLBACK — profile "fallback") ───────────────
   # NOT part of the default stack. Only runs with:  --profile fallback
   # Use it if MonsterMQ's native OPC-UA client hits config quirks (e.g. an
