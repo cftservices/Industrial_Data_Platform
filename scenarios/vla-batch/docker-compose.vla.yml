@@ -52,6 +52,16 @@ services:
     environment:
       OPCUA_ENDPOINT: "opc.tcp://0.0.0.0:4840/DairyWorks"
       FACTORY_MODEL: /model/isa95-vla.json
+      # Ketting batches aan elkaar. Zonder dit valt de fabriek na COMPLETE stil,
+      # en dan verandert er niets meer. Dat klinkt onschuldig en is het niet:
+      # MonsterMQ's OPC-UA-client publiceert op VERANDERING, dus een stilstaande
+      # fabriek maakt alles onzichtbaar wat van die publicaties afhangt.
+      #
+      # Dat heeft op de VPS twee keer een niet-bestaand defect voorgespiegeld:
+      # eerst leken alle DA-waarden UNCERTAIN (het constante qualityword kwam
+      # nooit aan), daarna leken de cross-checks stuk (de lijn-PLC-kant van elke
+      # vergelijking bleef weg). Beide keren was er simpelweg geen proces.
+      AUTOSTART_RECIPE: chocolate-vla-1L
       # ── demo-tempo ────────────────────────────────────────────────────────
       # Elke processtap duurt hiermee ~30s, een hele batch ~120s (was ~86s met
       # een scheve verdeling: doseren 2.4s tegenover koken 60s).
