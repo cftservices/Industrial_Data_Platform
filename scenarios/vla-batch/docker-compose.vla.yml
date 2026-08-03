@@ -195,6 +195,42 @@ services:
     networks:
       - idp-network
 
+  # ── VLA CONDITIONER (profile "vendor") — steps 2 and 3 of the seven ──────
+  #   raw/vla/{system}/{native}  --Condition--> --Model-->  DairyWorks/Vla/#
+  #
+  # Owned service rather than broker config on purpose: MonsterMQ's flow engine
+  # keeps its rules in Mongo, so the transformation logic would not be in git.
+  # That breaks version control, the first DataOps-for-OT discipline, and cannot
+  # be tested offline. NiFi wants ~1.5 GB of heap. Node-RED is banned.
+  #
+  # DEMO SWITCH:
+  #   curl -XPOST http://vla-conditioner:8080/api/v1/model-layer -d '{"enabled":false}'
+  # Raw keeps flowing, the UNS goes quiet, Grafana and the UI drain. Turn it back
+  # on and everything returns. Ten seconds, and the whole argument.
+  vla-conditioner:
+    profiles: ["vendor"]
+    build:
+      context: ./scenarios/vla-batch/conditioner
+      dockerfile: Dockerfile
+    image: techflow/vla-conditioner:latest
+    container_name: vla-conditioner
+    restart: unless-stopped
+    environment:
+      MODEL_DIR: /model
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+      RAW_ROOT: raw/vla
+      HTTP_PORT: "8080"
+      CONDITION_TRACE: "off"
+    volumes:
+      - ./scenarios/vla-batch/factory-model:/model:ro
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    mem_limit: 192m
+    networks:
+      - idp-network
+
   # ── VLA CONNECTOR (OPTIONAL FALLBACK — profile "fallback") ───────────────
   # NOT part of the default stack. Only runs with:  --profile fallback
   # Use it if MonsterMQ's native OPC-UA client hits config quirks (e.g. an

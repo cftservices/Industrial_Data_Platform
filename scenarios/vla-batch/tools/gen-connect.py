@@ -47,6 +47,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -370,6 +371,145 @@ def render_vendor_init(device: str, systems: list[dict], raw_root: str) -> str:
     return "\n".join(out)
 
 
+# ---------------------------------------------------------------------------
+# 5. factory-model/aliases.json + conditioning.json: the Model and Condition
+#    tables. Generated, because every fact they need is already declared on the
+#    points in source-systems.json and a fifth hand-kept copy is exactly what
+#    this generator exists to prevent.
+# ---------------------------------------------------------------------------
+
+# Fixed namespace for uuid5. Never change it: every canonical_signal_uuid in
+# every historian row is derived from it.
+UUID_NS = uuid.UUID("6f1f4a1e-6b6a-4a6e-9a1c-4d2f8e5b1c00")
+
+# canonical tag suffix -> canonical unit. Same house convention as the sims
+# (06-Model B.2b: the unit is a suffix on the tag name).
+CANON_UNIT = {
+    "_C": "C", "_L_min": "L/min", "_m3_h": "m3/h", "_kg": "kg", "_bar": "bar",
+    "_pct": "%", "_rpm": "rpm", "_sec": "s", "_min": "min", "_cP": "cP",
+    "_mS": "mS", "_L": "L", "_g": "g",
+}
+
+
+def canon_unit(tag_id: str) -> str:
+    tag = tag_id.split(":", 1)[1]
+    for suffix, unit in sorted(CANON_UNIT.items(), key=lambda kv: -len(kv[0])):
+        if tag.endswith(suffix):
+            return unit
+    return ""
+
+
+def _iter_points(doc: dict):
+    for s in doc["source_systems"]:
+        if not s.get("enabled", True):
+            continue
+        for p in s["points"]:
+            yield s, p
+
+
+def raw_topic_for(doc: dict, system: dict, point: dict) -> str:
+    return f"{doc['raw_root']}/{system['raw_prefix']}/{point['native']}"
+
+
+def render_aliases(doc: dict) -> str:
+    """The Model table: native name -> stable identity -> canonical UNS topic."""
+    aliases = []
+    for s, p in _iter_points(doc):
+        tag_id = p["canonical_tag_id"]
+        equipment, tag = tag_id.split(":", 1)
+        aliases.append({
+            "legacy_tag": raw_topic_for(doc, s, p),
+            # uuid5, so the identity is reproducible from the canonical tag id and
+            # survives the VENDOR renaming its item. That is the whole point: the
+            # historian keeps one series when the field name changes underneath.
+            "canonical_signal_uuid": str(uuid.uuid5(UUID_NS, tag_id)),
+            "canonical_topic": f"DairyWorks/Vla/{s['area']}/{equipment}/Status/{tag}",
+            "canonical_tag_id": tag_id,
+            "canonical_unit": canon_unit(tag_id),
+            "source_system": s["id"],
+            "equipment_id": equipment,
+            "vendor": s["vendor"],
+            "native_name": p["native"],
+            "native_unit": p.get("native_unit", ""),
+            "condition_rule": p["condition_rule"],
+            "retired_at": p.get("retired_at"),
+        })
+    doc_out = {
+        "schema_version": "1.0",
+        "_generated": BANNER.replace("\n", " "),
+        "mirrors": "warehouse.tag_aliases, see idp-os/docs/data-modeling.md",
+        "note": [
+            "This is the Model step. It is the difference between a number and a fact.",
+            "",
+            "canonical_signal_uuid is the stable identity. It is derived from the",
+            "canonical tag id, NOT from the vendor's name, so when a vendor renames",
+            "TT_3003_PV the alias row changes and the identity does not. Downstream",
+            "keeps one continuous series instead of silently starting a new one.",
+            "",
+            "retired_at set means the alias still RESOLVES on read but no longer",
+            "PUBLISHES. That is what makes an upstream rename a non-event."
+        ],
+        "aliases": aliases,
+    }
+    return json.dumps(doc_out, indent=2, ensure_ascii=False) + "\n"
+
+
+def render_conditioning(doc: dict) -> str:
+    """The Condition table: what must happen to the value before it means anything."""
+    rules = {}
+    for s, p in _iter_points(doc):
+        tag_id = p["canonical_tag_id"]
+        rule = {
+            "native_unit": p.get("native_unit", ""),
+            "canonical_unit": canon_unit(tag_id),
+            # A register holding tenths is multiplied by 0.1 to become engineering
+            # units. Nothing in the payload says so, which is why this table exists.
+            "scale": float(p.get("native_scale", 1) or 1),
+            "quality_source": s.get("native_quality", "none"),
+            "timestamp_source": s.get("native_timestamp", "none"),
+            "expected_interval_s": s.get("expected_interval_s", 60),
+        }
+        if p.get("deadband") is not None:
+            rule["deadband"] = p["deadband"]
+        if p.get("display_decimals") is not None:
+            rule["display_decimals"] = p["display_decimals"]
+        rules[p["condition_rule"]] = rule
+    doc_out = {
+        "schema_version": "1.0",
+        "_generated": BANNER.replace("\n", " "),
+        "note": [
+            "One rule per point, keyed by condition_rule so several points can share",
+            "one. Config, not code: a conversion you cannot see in a git diff is a",
+            "conversion you cannot audit, and in food production audit is the point.",
+            "",
+            "stale_threshold_s comes from isa95-vla.json so there is one number, and",
+            "deadband exists because agitator_rpm once produced 5.34 of the",
+            "historian's 5.35 million rows (factory/server.py)."
+        ],
+        "defaults": {
+            "assume_tz": "Europe/Amsterdam",
+            "deadband": 0.0,
+            "quality_map": {
+                "da-quality-word": {"192": "GOOD", "64": "UNCERTAIN", "0": "BAD"},
+                "opcua-statuscode": {"0": "GOOD", "_bad_prefix": "BAD", "_uncertain_prefix": "UNCERTAIN"},
+                "none": {"_default": "GOOD"}
+            }
+        },
+        "rules": rules,
+    }
+    return json.dumps(doc_out, indent=2, ensure_ascii=False) + "\n"
+
+
+def model_targets() -> dict[Path, str]:
+    if not SOURCES.exists():
+        return {}
+    doc = json.loads(SOURCES.read_text(encoding="utf-8"))
+    return {
+        ROOT / "factory-model" / "aliases.json": render_aliases(doc),
+        ROOT / "factory-model" / "conditioning.json": render_conditioning(doc),
+    }
+
+
 def vendor_targets() -> dict[Path, str]:
     """Init scripts for every MonsterMQ-ingested vendor island, grouped by device."""
     if not SOURCES.exists():
@@ -400,6 +540,7 @@ def targets(model: dict) -> dict[Path, str]:
         init_path: splice(init_path, render_init_tags(equipment, batch)),
     }
     out.update(vendor_targets())
+    out.update(model_targets())
     return out
 
 
