@@ -111,7 +111,13 @@ def connect_sql(endpoint: str):
 
 def poll_once(source: dict, conn, client) -> int:
     cursor = conn.cursor(as_dict=True)
-    query = source["query"]
+    # sources.yaml schrijft de portable ODBC-stijl `?`; pymssql wil `%s`. Dat
+    # verschil is een driver-detail en hoort niet in de config te lekken, anders
+    # is de query niet meer leesbaar voor iemand die hem in SSMS wil plakken.
+    #
+    # GEVONDEN OP DE VPS, 2026-08-03: alleen een echte TDS-verbinding laat dit
+    # zien. Offline liep de test op sqlite, en die accepteert `?` juist wel.
+    query = source["query"].replace("?", "%s")
     params = ()
     if source.get("watermark") and source["watermark"] != "null":
         params = (source.get("_since") or datetime(1970, 1, 1),)
