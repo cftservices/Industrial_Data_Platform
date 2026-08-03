@@ -137,6 +137,54 @@ check("12. one stable identity per canonical tag",
       len(set(uuids.values())) == len(uuids),
       f"{len(uuids)} distinct signals, uuid5-derived so a vendor rename keeps the series")
 
+
+# ---------------------------------------------------------------------------
+# 13-15. Cross-checks: publish the disagreement instead of hiding it
+# ---------------------------------------------------------------------------
+from crosscheck import CrossChecks, topic_for  # noqa: E402
+
+sources = json.loads((ROOT / "factory-model" / "source-systems.json").read_text(encoding="utf-8"))
+XC = sources["cross_checks"]
+
+cc = CrossChecks(XC)
+first = cc.observe("pasteuriser-01:hold_temp_C", 77.1, NOW)
+check("13. nothing is emitted until BOTH sides have been seen",
+      first == [],
+      "a divergence against a value never received is a guess, not a divergence")
+
+msgs = dict(cc.observe("cook-unit-01:temp_C", 76.3, NOW))
+delta = msgs[topic_for("XC-COOK-TEMP_delta")]
+alarm = msgs[topic_for("XC-COOK-TEMP_alarm")]
+check("14. the cook-temp conflict is published as a signal, both sides intact",
+      abs(delta["value"] - 0.8) < 0.01 and delta["of_record"] == "pasteuriser-01:hold_temp_C"
+      and alarm["value"] == 0
+      and delta["a_value"] == 77.1 and delta["b_value"] == 76.3,
+      f"delta {delta['value']:+.2f} C within the {XC[0]['tolerance']} C tolerance; "
+      f"of record for {delta['of_record_for']}")
+
+# the starch dose: certified scale against the flow estimate the engine books today
+msgs2 = dict(cc.observe("dosing-station-01:net_weight_kg", 255.0, NOW))
+msgs2.update(dict(cc.observe("process-tank-01:dose_starch_actual_kg", 250.0, NOW)))
+a2 = msgs2[topic_for("XC-STARCH-DOSE_alarm")]
+check("15. the starch conflict breaches tolerance and says which side is of record",
+      a2["value"] == 1 and "of record" in a2["message"].lower(),
+      a2["message"])
+
+# a pair of quantities that are related but not identical must NOT alarm
+msgs3 = dict(cc.observe("intake-skid-01:volume_total_L", 5075.0, NOW))
+msgs3.update(dict(cc.observe("receiving-tank-01:level_L", 4900.0, NOW)))
+check("16. delta_only pairs report a delta but never a false alarm",
+      topic_for("XC-INTAKE-VOLUME_delta") in msgs3
+      and topic_for("XC-INTAKE-VOLUME_alarm") not in msgs3,
+      "a totaliser and a level are not the same quantity, so only drift is interesting")
+
+# every cross-check must obey the locked UNS topic form
+bad_xc = [t for t in list(msgs) + list(msgs2) + list(msgs3)
+          if not t.startswith("DairyWorks/Vla/DataQuality/cross-check-01/Status/")]
+check("17. cross-check output obeys the locked UNS topic form, no canon exception",
+      not bad_xc,
+      "DairyWorks/Vla/DataQuality/cross-check-01/Status/{id}_delta|_alarm")
+
 print("=" * 62)
 print("RESULT:", "ALL PASS" if FAIL == 0 else f"{FAIL} FAILED")
 sys.exit(1 if FAIL else 0)

@@ -736,5 +736,110 @@
         }
       ]
     }
-  ]
+  ],
+  "cross_checks_note": [
+    "Two systems measuring the same physical thing will disagree. That is normal",
+    "and it is not a bug to be averaged away.",
+    "",
+    "This section is AUTHORED, not generated, because 'which source is of record'",
+    "is a business decision and not a fact you can derive from the model. That is",
+    "the whole point: today the argument gets settled by whoever is most senior in",
+    "the room, because nothing writes the decision down. Here it is written down.",
+    "",
+    "RULE. Exactly one source is of_record for a given question, and it publishes",
+    "the canonical tag. The other side keeps publishing under its OWN equipment,",
+    "so both readings stay real and visible. The layer then publishes the DELTA as",
+    "a signal of its own, and raises an alarm when the delta leaves tolerance.",
+    "",
+    "Never silently pick one. Never average. An averaged number is one that no",
+    "instrument ever measured, and it is unauditable."
+  ],
+  "cross_checks": [
+    {
+      "id": "XC-COOK-TEMP",
+      "title": "Hold-tube temperature: safety record against process record",
+      "a": {
+        "tag_id": "pasteuriser-01:hold_temp_C",
+        "of_record_for": "the legal pasteurisation record (72 C minimum)"
+      },
+      "b": {
+        "tag_id": "cook-unit-01:temp_C",
+        "of_record_for": "the viscosity model and the batch verdict"
+      },
+      "tolerance": 1.5,
+      "unit": "C",
+      "severity": "high",
+      "why": [
+        "Both are correct and they answer different questions, which is exactly",
+        "why designating one 'the' truth would be wrong.",
+        "",
+        "Under cook_undertemp at 0.65 the line reads ~76.3 C, giving ~110 cP,",
+        "below the 150 cP spec, so the batch must be held. The skid reads ~77.1 C,",
+        "above the 72 C legal minimum, so the SAFETY record is clean.",
+        "",
+        "Safe to eat and out of specification, at the same time. The plant needs",
+        "both answers and today it can only see one."
+      ]
+    },
+    {
+      "id": "XC-STARCH-DOSE",
+      "title": "Starch dose: certified scale against flow estimate",
+      "a": {
+        "tag_id": "dosing-station-01:net_weight_kg",
+        "of_record_for": "the batch record and the label"
+      },
+      "b": {
+        "tag_id": "process-tank-01:dose_starch_actual_kg",
+        "of_record_for": "live process control during dosing"
+      },
+      "tolerance": 2.5,
+      "unit": "kg",
+      "severity": "high",
+      "why": [
+        "The line PLC publishes a flow-meter ESTIMATE. The weigh hopper is a",
+        "certified scale and reads about 2% higher.",
+        "",
+        "The batch engine currently books the PLC number, silently, because it",
+        "is the only one it can see. The certified number is the one that belongs",
+        "in a batch record, and nobody chose that: it just happened."
+      ]
+    },
+    {
+      "id": "XC-INTAKE-VOLUME",
+      "title": "Milk received: goods receipt against process view",
+      "a": {
+        "tag_id": "intake-skid-01:volume_total_L",
+        "of_record_for": "goods receipt and supplier settlement"
+      },
+      "b": {
+        "tag_id": "receiving-tank-01:level_L",
+        "of_record_for": "how much is available to dose right now"
+      },
+      "tolerance": 150.0,
+      "unit": "L",
+      "severity": "medium",
+      "compare": "delta_only",
+      "why": [
+        "A totaliser counts what arrived over time; a level shows what is in the",
+        "tank now. They are not the same quantity, so the absolute difference is",
+        "expected and only a DRIFT between them is interesting.",
+        "",
+        "Kept as delta_only for that reason: publishing a divergence alarm on two",
+        "quantities that are not comparable would be the kind of false alarm this",
+        "demo criticises elsewhere."
+      ]
+    }
+  ],
+  "data_quality_equipment": {
+    "equipment_id": "cross-check-01",
+    "area": "DataQuality",
+    "note": [
+      "Not a machine. The layer's own output about its own inputs.",
+      "",
+      "It publishes on the SAME locked UNS topic form as everything else, so no",
+      "consumer needs a special case and no canon amendment is required:",
+      "  DairyWorks/Vla/DataQuality/cross-check-01/Status/{id}_delta",
+      "  DairyWorks/Vla/DataQuality/cross-check-01/Status/{id}_alarm"
+    ]
+  }
 }

@@ -35,6 +35,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 from condition import ConditionError, condition, is_stale, parse_payload
+from crosscheck import CrossChecks
 
 log = logging.getLogger("vla-conditioner")
 logging.basicConfig(
@@ -67,7 +68,7 @@ class Layer:
         self.last_value: dict[str, float] = {}  # for the deadband
         self.last_seen: dict[str, datetime] = {}
         self.counters = {"raw_in": 0, "published": 0, "suppressed": 0,
-                         "unmapped": 0, "errors": 0}
+                         "unmapped": 0, "errors": 0, "cross_check_msgs": 0}
         self.load()
 
     def load(self) -> None:
@@ -82,13 +83,20 @@ class Layer:
                         if a.get("retired_at")}
         self.rules = cond["rules"]
         self.defaults = cond.get("defaults", {})
+        sources = json.loads((MODEL_DIR / "source-systems.json").read_text(encoding="utf-8"))
+        self.checks = CrossChecks(sources.get("cross_checks", []))
+        # tag id -> canonical topic, so a value arriving on the UNS from the LINE
+        # PLC (the other half of every conflict) can be fed to the comparison too.
+        self.canon_by_topic = {a["canonical_topic"]: a["canonical_tag_id"]
+                               for a in self.aliases.values()}
         try:
             model = json.loads((MODEL_DIR / "isa95-vla.json").read_text(encoding="utf-8"))
             self.stale_threshold_s = float(model.get("stale_threshold_s", 90))
         except Exception:
             pass
-        log.info("loaded %d active aliases (%d retired), %d rules",
-                 len(self.aliases), len(self.retired), len(self.rules))
+        log.info("loaded %d active aliases (%d retired), %d rules, %d cross-checks",
+                 len(self.aliases), len(self.retired), len(self.rules),
+                 len(self.checks.defs))
 
     def status(self) -> dict:
         now = datetime.now(timezone.utc)
@@ -102,11 +110,32 @@ class Layer:
             "aliases_retired": len(self.retired),
             "stale_tags": len(stale),
             "counters": dict(self.counters),
+            "cross_checks": len(self.checks.defs),
             "trace": TRACE,
         }
 
 
 LAYER = Layer()
+
+# Canonical topics owned by the LINE PLC that take part in a cross-check. Built
+# from the equipment id in each tag id, using the same locked topic form.
+_AREA_OF = {"receiving-tank-01": "Receiving", "process-tank-01": "Mixing",
+            "cook-unit-01": "Cook", "cooler-01": "Cooling", "filler-01": "Filling"}
+
+
+def _line_tag_topics(checks) -> dict[str, str]:
+    out = {}
+    for d in checks.defs:
+        for side in ("a", "b"):
+            tag_id = d[side]["tag_id"]
+            equipment, tag = tag_id.split(":", 1)
+            area = _AREA_OF.get(equipment)
+            if area:  # only line-PLC equipment; vendor tags arrive on raw/
+                out[f"DairyWorks/Vla/{area}/{equipment}/Status/{tag}"] = tag_id
+    return out
+
+
+LINE_TAGS = _line_tag_topics(LAYER.checks)
 
 
 def on_message(client, _userdata, msg) -> None:
@@ -168,6 +197,31 @@ def on_message(client, _userdata, msg) -> None:
     LAYER.last_value[topic] = out["value"]
     LAYER.counters["published"] += 1
     client.publish(alias["canonical_topic"], json.dumps(out), qos=0, retain=False)
+    publish_cross_checks(client, alias["canonical_tag_id"], out["value"])
+
+
+def publish_cross_checks(client, tag_id: str, value: float) -> None:
+    for topic, payload in LAYER.checks.observe(tag_id, value):
+        LAYER.counters["cross_check_msgs"] += 1
+        client.publish(topic, json.dumps(payload), qos=0, retain=False)
+
+
+def on_uns_message(client, _userdata, msg) -> None:
+    """The LINE PLC half of every conflict arrives on the UNS, not on raw/.
+
+    Subscribing to our own output tree sounds like a loop, and it is not: the
+    conditioner only ever publishes under DataQuality/, and it only listens for
+    the specific canonical topics that take part in a declared cross-check.
+    Without this the comparison would only ever see one side.
+    """
+    tag_id = LINE_TAGS.get(msg.topic)
+    if tag_id is None:
+        return
+    try:
+        value = float(parse_payload(msg.payload)["value"])
+    except Exception:
+        return
+    publish_cross_checks(client, tag_id, value)
 
 
 class Control(BaseHTTPRequestHandler):
@@ -227,9 +281,14 @@ def main() -> None:
 
     def _on_connect(c, _userdata, _flags, _rc, *_args):
         c.subscribe(f"{RAW_ROOT}/#", qos=0)
-        log.info("subscribed %s/#", RAW_ROOT)
+        for t in LINE_TAGS:
+            c.subscribe(t, qos=0)
+        log.info("subscribed %s/# plus %d line-PLC tags for cross-checks",
+                 RAW_ROOT, len(LINE_TAGS))
 
     client.on_message = on_message
+    for t in LINE_TAGS:
+        client.message_callback_add(t, on_uns_message)
     client.on_connect = _on_connect
     client.reconnect_delay_set(1, 30)
     while True:
