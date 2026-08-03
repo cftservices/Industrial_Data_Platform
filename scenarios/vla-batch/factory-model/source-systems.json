@@ -1,0 +1,192 @@
+{
+  "schema_version": "1.0",
+  "title": "Vendor source systems for the Vla line",
+  "purpose": [
+    "The line PLC (vla-factory) is NOT the only source in a real plant. Every process",
+    "part is assembled from vendor skids that each arrive with their own controller,",
+    "their own tag names, their own units and their own idea of quality. They are",
+    "physically wired to the same product line and informationally wired to nothing.",
+    "",
+    "This file describes those islands: what they are, how you reach them, what they",
+    "natively call things, and which canonical ISA-95 tag each native point maps to.",
+    "",
+    "It is deliberately SEPARATE from isa95-vla.json. That file answers 'what is this",
+    "equipment and where does it sit in the plant'. This file answers 'how do I reach",
+    "it and what does it call things'. Conflating those two is exactly what produced",
+    "the four-copies drift that tools/gen-connect.py now prevents."
+  ],
+  "raw_root": "raw/vla",
+  "raw_root_rationale": [
+    "Raw vendor data lands OUTSIDE the UNS, on its own root, for two reasons.",
+    "",
+    "1. Concrete: MonsterMQ archive group 'dairyworks_data' matches 'DairyWorks/#'.",
+    "   Anything parked under DairyWorks/ is silently archived to MongoDB. Putting raw",
+    "   vendor tags there would build a data swamp inside the demo that argues against",
+    "   data swamps.",
+    "2. Rhetorical: in a topic browser the presenter points at two trees. One is a",
+    "   modelled plant. The other is a junk drawer. That contrast IS the demo.",
+    "",
+    "raw/vla/# is therefore excluded from every archive group and from the TDengine",
+    "bridge's MQTT_TOPICS. Unmodelled data is not stored. Model first, then store."
+  ],
+  "payload_note": [
+    "There is no single raw payload shape, and that is not sloppiness: each connector",
+    "emits its own. MonsterMQ's OPC-UA client publishes {value, timestamp, status},",
+    "where 'status' is a numeric OPC-UA StatusCode. The UNS contract is",
+    "{value, unit, ts, quality}. They do not line up: different key names, no unit at",
+    "all, and a numeric status where the contract wants GOOD/BAD/UNCERTAIN.",
+    "",
+    "So the Condition step is structurally mandatory, not a nice-to-have. You cannot",
+    "point a consumer at a raw topic and get something meaningful, no matter how",
+    "modern the protocol underneath is."
+  ],
+  "anonymization": "Generic archetypes only. Vendor tokens are vendor-a..vendor-f. No real manufacturer names, model numbers, IP addresses, network paths or vendor schemas anywhere in this file or in anything generated from it (PR-15).",
+
+  "distortion_units_note": [
+    "Every number inside a 'distortion' block is in the CANONICAL (SI) unit of the",
+    "target tag, never in the vendor's unit. So 'offset: 0.8' on a *_C tag is 0.8",
+    "degrees CELSIUS, and 'base: 350.0' on a *_L_min tag is 350 litres per minute.",
+    "",
+    "The conversion to the vendor's unit and the scaling to a register integer happen",
+    "afterwards, in exactly that order. Mixing the two up produces a value that looks",
+    "plausible and is wrong by a factor of 3.8, which is precisely the class of bug",
+    "this whole demo is about."
+  ],
+
+  "protocols": {
+    "OPC_DA": {
+      "label": "OPC-DA via a DA/UA tunneller",
+      "honesty_note": [
+        "OPC-DA is DCOM and runs on Windows only. It is not implementable in a Linux",
+        "container and WE HAVE NOT IMPLEMENTED IT. What we simulate is how you actually",
+        "reach a DA island from a Linux data layer: a DA server behind a DA/UA tunneller,",
+        "and we connect to the tunneller's OPC-UA endpoint.",
+        "",
+        "The transport is UA; the DATA is DA, and that is the part that matters:",
+        "  * flat ItemIDs with no hierarchy (Ch1.Dev2.TT_3003_PV)",
+        "  * the DA quality word as a separate companion item (192 GOOD, 64 UNCERTAIN,",
+        "    0 BAD), not an OPC-UA StatusCode",
+        "  * no per-item source timestamp, so the only time you get is receive time",
+        "  * values as scaled integers, because the underlying registers are integers",
+        "",
+        "Say this out loud in the demo. Claiming a DCOM implementation is exactly the",
+        "kind of thing the audience you want to convince will check."
+      ],
+      "quality_word": { "192": "GOOD", "64": "UNCERTAIN", "0": "BAD" }
+    }
+  },
+
+  "source_systems": [
+    {
+      "id": "SRC-PAST-01",
+      "equipment_id": "pasteuriser-01",
+      "area": "Cook",
+      "archetype": "heat-treatment-skid",
+      "description": "HTST heat-treatment skid: heats the vla to the hold temperature, holds it, and diverts the flow if the hold tube drops below the legal minimum.",
+      "vendor": "vendor-c",
+      "protocol": "OPC_DA",
+      "transport": "da-ua-tunneller",
+      "endpoint": "opc.tcp://vla-vendor-opcda:4843/DATunnel",
+      "opcua_namespace_uri": "urn:datunnel",
+      "opcua_namespace_index": 2,
+      "namespace_index_note": [
+        "Yes, ns=2, the SAME index the line PLC uses for urn:dairyworks. That is not",
+        "a clash and not a mistake: namespace indices are per server, not global. Each",
+        "server numbers its own namespaces, so the first custom namespace on any server",
+        "lands on ns=2.",
+        "",
+        "Which makes the point better than a different number would have: 'ns=2;s=...'",
+        "is meaningless on its own. The same string addresses two completely unrelated",
+        "things depending on which endpoint you sent it to. A node id without its",
+        "endpoint and namespace URI is not an identity, and that is exactly why the",
+        "Model step has to mint a stable identity of its own."
+      ],
+      "ingest": "monstermq-opcua",
+      "device_name": "vendor-da",
+      "raw_prefix": "pasteuriser-01",
+      "expected_interval_s": 1,
+      "native_timestamp": "none",
+      "native_quality": "da-quality-word",
+      "enabled": true,
+
+      "the_conflict": [
+        "This skid and the line PLC measure the same fluid at the same moment, and",
+        "they disagree. The vendor RTD sits further down the hold tube, reads about",
+        "0.8 C high and lags roughly 2 seconds. Both readings are correct; they are",
+        "answers to different questions.",
+        "",
+        "Run cook_undertemp at magnitude 0.65 and the split becomes a business",
+        "decision rather than a rounding argument:",
+        "  * line PLC   -> peak cook ~76.3 C -> viscosity ~110 cP -> BELOW the 150 cP",
+        "                  spec -> the batch must be held or recooked",
+        "  * this skid  -> hold tube ~77.1 C, comfortably above the 72 C legal",
+        "                  pasteurisation minimum -> the SAFETY record is clean",
+        "",
+        "So the legal record says the product is safe and the process record says it",
+        "is out of spec. Both true. Today nobody sees the second half, because it",
+        "lives on an island. That is the entire pitch in one screen.",
+        "",
+        "READ THE DELTA DURING COOKING, NOT DURING A PHASE CHANGE. In steady cooking",
+        "the gap is a clean +0.8 C and that is the declared calibration error. At the",
+        "COOKING -> COOLING transition it briefly reads tens of degrees high, because",
+        "the demo runs at TIME_SCALE 15 and the line drops ~58 C in about one real",
+        "second while the island scans at 1 Hz. That spike is a sampling artefact of",
+        "the acceleration, not the conflict. Do not put it on a slide."
+      ],
+
+      "points": [
+        {
+          "native": "Ch1.Dev2.TT_3001_PV",
+          "description": "product inlet temperature",
+          "datatype": "Int32",
+          "native_unit": "degF",
+          "native_scale": 0.1,
+          "canonical_tag_id": "pasteuriser-01:temp_in_C",
+          "condition_rule": "R-PAST-TEMP-IN",
+          "distortion": { "source": "Mixing/process-tank-01/temp_C", "offset": -0.4, "lag_s": 1.0, "noise_sigma": 0.2 }
+        },
+        {
+          "native": "Ch1.Dev2.TT_3002_PV",
+          "description": "product outlet temperature",
+          "datatype": "Int32",
+          "native_unit": "degF",
+          "native_scale": 0.1,
+          "canonical_tag_id": "pasteuriser-01:temp_out_C",
+          "condition_rule": "R-PAST-TEMP-OUT",
+          "distortion": { "source": "Cook/cook-unit-01/temp_C", "offset": -0.3, "lag_s": 3.0, "noise_sigma": 0.2 }
+        },
+        {
+          "native": "Ch1.Dev2.TT_3003_PV",
+          "description": "hold tube temperature, the legally relevant pasteurisation measurement",
+          "datatype": "Int32",
+          "native_unit": "degF",
+          "native_scale": 0.1,
+          "canonical_tag_id": "pasteuriser-01:hold_temp_C",
+          "condition_rule": "R-PAST-HOLD-TEMP",
+          "cross_check": "XC-COOK-TEMP",
+          "distortion": { "source": "Cook/cook-unit-01/temp_C", "offset": 0.8, "lag_s": 2.0, "noise_sigma": 0.15 }
+        },
+        {
+          "native": "Ch1.Dev2.ZV_3004_ST",
+          "description": "flow-diversion valve: 1 = diverted because the hold tube fell below the legal minimum",
+          "datatype": "Int32",
+          "native_unit": "bool",
+          "native_scale": 1,
+          "canonical_tag_id": "pasteuriser-01:divert_position",
+          "condition_rule": "R-PAST-DIVERT",
+          "distortion": { "source": "Cook/cook-unit-01/temp_C", "mode": "threshold_below", "threshold": 72.0 }
+        },
+        {
+          "native": "Ch1.Dev2.FT_3006_PV",
+          "description": "product flow through the skid",
+          "datatype": "Int32",
+          "native_unit": "gal/min",
+          "native_scale": 0.1,
+          "canonical_tag_id": "pasteuriser-01:flow_L_min",
+          "condition_rule": "R-PAST-FLOW",
+          "distortion": { "source": "Cook/cook-unit-01/temp_C", "mode": "flow_when_hot", "threshold": 60.0, "base": 350.0, "noise_sigma": 5.0 }
+        }
+      ]
+    }
+  ]
+}
