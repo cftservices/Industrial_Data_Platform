@@ -286,6 +286,20 @@ klasse fouten waar deze demo over gaat.
 
 Eerlijk, zodat niemand ernaar zoekt:
 
+> **Geverifieerd op de VPS, 3-8-2026.** Alle drie de koppelvlakken draaien:
+> MonsterMQ leest de DA-tunneller op ns=2, de conditioner verwerkte 253k
+> berichten met 0 unmapped, en de gateway praat TDS met SQL Server. De
+> alias-les is live te zien: `raw/vla/cmms-01/CK-UNIT-1` komt uit op
+> `DairyWorks/Vla/Cook/cook-unit-01/Status/open_wo_count`.
+>
+> Vijf fouten kwamen pas boven water bij die eerste echte run, geen ervan
+> vindbaar met een offline test: een ontbrekende COPY in een Dockerfile, 12
+> `.Q`-adressen op een UA-device dat die niet heeft, de deploy-volgorde rond het
+> constante DA-qualityword, en `?` versus `%s` als SQL-placeholder (sqlite
+> accepteert `?` juist wel, dus de selftest zag het niet).
+
+Nog niet gebouwd:
+
 - **MQTT-eiland** (`checkweigher-01` met PackML, `case-packer-01` met Sparkplug B)
   op een eigen broker. Zou de per-kop vulgewichten leveren die
   `frontend-uiux-spec.md §13` al tekent en die niets in de stack vandaag maakt.
