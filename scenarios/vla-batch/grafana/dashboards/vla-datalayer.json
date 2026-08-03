@@ -1,0 +1,249 @@
+{
+  "uid": "vla-datalayer",
+  "id": null,
+  "version": 1,
+  "title": "VLA Data Layer, bronnen en onenigheid",
+  "description": "Wat de leverancierseilanden leveren nadat Condition en Model er iets van hebben gemaakt, en waar twee bronnen het oneens zijn. Alleen gemodelleerde topics: raw/vla/# staat bewust niet in de historian, want ongemodelleerde data slaan we niet op.",
+  "tags": ["vla-batch", "dairyworks", "milkdemo", "data-layer"],
+  "timezone": "browser",
+  "editable": true,
+  "graphTooltip": 1,
+  "refresh": "5s",
+  "schemaVersion": 39,
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": { "list": [] },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Het conflict dat een besluit omdraait",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Kooktemperatuur: lijn-PLC tegen de pasteur",
+      "description": "Dezelfde vloeistof, hetzelfde moment, twee systemen. De pasteur zit verderop in de holdbuis, leest ongeveer 0,8 C hoger en loopt iets achter. Beide metingen kloppen; ze beantwoorden een andere vraag. Lees het verschil tijdens COOKING, niet tijdens een faseovergang.",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 1 },
+      "datasource": { "type": "tdengine-datasource", "uid": "vla-tdengine" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "tdengine-datasource", "uid": "vla-tdengine" },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, avg(`value`) as lijn_plc from idp.telemetry where `topic`='DairyWorks/Vla/Cook/cook-unit-01/Status/temp_C' and _ts >= $from and _ts <= $to interval(5s) fill(prev)"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "tdengine-datasource", "uid": "vla-tdengine" },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, avg(`value`) as pasteur_holdbuis from idp.telemetry where `topic`='DairyWorks/Vla/Cook/pasteuriser-01/Status/hold_temp_C' and _ts >= $from and _ts <= $to interval(5s) fill(prev)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "decimals": 1,
+          "custom": { "lineWidth": 2, "fillOpacity": 0, "showPoints": "never" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "text", "value": null }] }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Het verschil, met de tolerantie erin",
+      "description": "Het verschil is een signaal op zichzelf, gepubliceerd door de laag op DataQuality/cross-check-01. Buiten de band van 1,5 C hoort een alarm. De laag kiest niet stil en middelt niet: een gemiddelde is een getal dat geen enkel instrument ooit heeft gemeten.",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 1 },
+      "datasource": { "type": "tdengine-datasource", "uid": "vla-tdengine" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "tdengine-datasource", "uid": "vla-tdengine" },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, avg(`value`) as verschil_c from idp.telemetry where `topic`='DairyWorks/Vla/DataQuality/cross-check-01/Status/XC-COOK-TEMP_delta' and _ts >= $from and _ts <= $to interval(5s) fill(prev)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "decimals": 2,
+          "custom": { "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "text", "value": null },
+              { "color": "orange", "value": 1.5 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } }
+    },
+    {
+      "id": 4,
+      "type": "row",
+      "title": "Zetmeeldosering: gecertificeerde weegschaal tegen flow-schatting",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 10 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Wat gaat er in het batchrapport?",
+      "description": "De lijn-PLC publiceert een flow-schatting; het weegstation is een gecertificeerde schaal en leest ongeveer 2 procent hoger. De batch-engine boekt vandaag het PLC-getal, omdat dat het enige is dat hij kan zien. Het gecertificeerde getal is het getal dat in een batchrapport hoort.",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 11 },
+      "datasource": { "type": "tdengine-datasource", "uid": "vla-tdengine" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "tdengine-datasource", "uid": "vla-tdengine" },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, avg(`value`) as lijn_schatting from idp.telemetry where `topic`='DairyWorks/Vla/Mixing/process-tank-01/Status/dose_starch_actual_kg' and _ts >= $from and _ts <= $to interval(5s) fill(prev)"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "tdengine-datasource", "uid": "vla-tdengine" },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, avg(`value`) as gecertificeerde_weegschaal from idp.telemetry where `topic`='DairyWorks/Vla/Mixing/dosing-station-01/Status/net_weight_kg' and _ts >= $from and _ts <= $to interval(5s) fill(prev)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "kg",
+          "decimals": 1,
+          "custom": { "lineWidth": 2, "fillOpacity": 0, "showPoints": "never" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "text", "value": null }] }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Verschil in de dosering",
+      "description": "Tolerantie 2,5 kg. Erboven is het geen meetruis meer maar een vraag over wat er op het etiket komt.",
+      "gridPos": { "h": 9, "w": 6, "x": 12, "y": 11 },
+      "datasource": { "type": "tdengine-datasource", "uid": "vla-tdengine" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "tdengine-datasource", "uid": "vla-tdengine" },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(`value`) as verschil_kg from idp.telemetry where `topic`='DairyWorks/Vla/DataQuality/cross-check-01/Status/XC-STARCH-DOSE_delta'"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "kg",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 2.5 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "value", "graphMode": "area", "textMode": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } }
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Openstaande werkorders, per procesdeel",
+      "description": "Uit het onderhoudssysteem, dat de kookketel CK-UNIT-1 noemt terwijl de lijn hem cook-unit-01 noemt. Er viel niets te converteren: er was alleen nooit iemand die de twee namen aan elkaar knoopte. Daarom stond onderhoudsbelasting nog nooit naast procesprestatie in een rapport.",
+      "gridPos": { "h": 9, "w": 6, "x": 18, "y": 11 },
+      "datasource": { "type": "tdengine-datasource", "uid": "vla-tdengine" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "tdengine-datasource", "uid": "vla-tdengine" },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(`value`) as kookketel from idp.telemetry where `topic`='DairyWorks/Vla/Cook/cook-unit-01/Status/open_wo_count'"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "tdengine-datasource", "uid": "vla-tdengine" },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(`value`) as vuller from idp.telemetry where `topic`='DairyWorks/Vla/Filling/filler-01/Status/open_wo_count'"
+        },
+        {
+          "refId": "C",
+          "datasource": { "type": "tdengine-datasource", "uid": "vla-tdengine" },
+          "queryType": "SQL",
+          "formatType": "Table",
+          "sql": "select last(`value`) as homogenisator from idp.telemetry where `topic`='DairyWorks/Vla/Mixing/homogeniser-01/Status/open_wo_count'"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "text", "value": null }, { "color": "orange", "value": 3 }] }
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "value", "graphMode": "none", "textMode": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } }
+    },
+    {
+      "id": 8,
+      "type": "row",
+      "title": "Het paar dat eindelijk sluit",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 20 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Vetgehalte: doel tegen meting",
+      "description": "De lijn publiceerde altijd al een setpoint. De meting bestond ook altijd al, elke batch, in het labsysteem dat niemand had aangesloten. Zonder die tweede lijn kon niemand zeggen of de standaardisatie werkte. Canon 06-Model B.2b: doel en meting bestaan altijd als paar.",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 21 },
+      "datasource": { "type": "tdengine-datasource", "uid": "vla-tdengine" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "tdengine-datasource", "uid": "vla-tdengine" },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, avg(`value`) as doel_setpoint from idp.telemetry where `topic`='DairyWorks/Vla/Receiving/receiving-tank-01/Status/fat_setpoint_pct' and _ts >= $from and _ts <= $to interval(30s) fill(prev)"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "tdengine-datasource", "uid": "vla-tdengine" },
+          "queryType": "SQL",
+          "formatType": "Time series",
+          "sql": "select _wstart as ts, avg(`value`) as gemeten_lab from idp.telemetry where `topic`='DairyWorks/Vla/Receiving/receiving-tank-01/Status/fat_actual_pct' and _ts >= $from and _ts <= $to interval(30s) fill(prev)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "custom": { "lineWidth": 2, "fillOpacity": 0, "showPoints": "auto" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "text", "value": null }] }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    }
+  ]
+}
