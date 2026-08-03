@@ -1,15 +1,33 @@
 # Vla Batch v2 — VPS deploy-checklist
 
-> Doel: de vla-batch demo live op één beveiligde URL, op een goedkope Ubuntu VPS (~2 GB).
+> Doel: de vla-batch demo live op één beveiligde URL, op een goedkope Ubuntu VPS.
 > Stack = slim-base (`docker-compose.slim.yml`) + overlay (`scenarios/vla-batch/docker-compose.vla.yml`).
 > Helper-script: [`deploy.sh`](deploy.sh) (`up` / `verify` / `smoke` / `fallback` / `logs` / `down`).
 > Architectuur: fabriek-als-OPC-UA → **MonsterMQ native OPC-UA-client** (ingest) → UNS → MongoDB + TDengine → Grafana/BIRT/dashboard. Zie [`README.md`](README.md).
 
 ---
 
+## Geheugenbudget per profiel
+
+Dit document beloofde eerder "~2 GB" terwijl `vla-ollama` (4 GB) en `vla-tdgpt`
+(1,5 GB) zonder profile in de compose stonden. Die belofte klopte alleen zolang
+je die containers niet startte. Sinds de opt-in profiles klopt de tabel wel.
+
+| Profiel | Commando | Extra containers | Gedeclareerd `mem_limit` | Advies RAM |
+|---|---|---|---|---|
+| **basis** | `docker compose ... up -d` | fabriek, batch-engine, TDengine, bridge, dashboard, UI, Grafana + slim-base | ~1,4 GB | **2 GB** (4 GB comfortabeler) |
+| **+ ai** | `--profile ai` | `vla-ollama` (4 GB), `vla-tdgpt` (1,5 GB), `vla-ai` | ~7,2 GB | **8 GB** |
+| **+ vendor** | `--profile vendor` | de gesimuleerde leverancierseilanden + conditioner | ~2,2 GB | **4 GB** |
+| **+ vendor-sql** | `--profile vendor-sql` | het SQL Server-eiland | ~3,2 GB | **6 GB** |
+
+Profielen stapelen: `--profile vendor --profile vendor-sql` draait beide.
+Zonder profile-vlag krijg je exact de demo van vandaag, ongewijzigd.
+
+---
+
 ## 0. Vooraf (eenmalig)
 
-- [ ] **VPS**: Ubuntu 22.04/24.04, ≥ 2 GB RAM (TDengine + 8 containers; 4 GB comfortabeler), ≥ 20 GB disk.
+- [ ] **VPS**: Ubuntu 22.04/24.04, ≥ 20 GB disk. RAM volgens de profieltabel hierboven: 2 GB voor de basis-stack, meer zodra je `--profile ai` of `--profile vendor` gebruikt.
 - [ ] **Docker + Compose v2**:
       ```bash
       curl -fsSL https://get.docker.com | sh

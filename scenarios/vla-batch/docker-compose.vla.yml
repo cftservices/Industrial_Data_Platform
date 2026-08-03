@@ -189,6 +189,11 @@ services:
     image: tdengine/tdengine-tdgpt:3.3.6.0
     container_name: vla-tdgpt
     hostname: vla-tdgpt
+    # Profile "ai": tdgpt (1500m) + ollama (4g) + vla-ai (256m) is ~5.8 GB, which
+    # is far more than the whole rest of the stack. They used to start by default,
+    # which quietly made the "~2 GB VPS" claim in DEPLOY.md untrue for anyone who
+    # ran plain `docker compose up`. Opt in with --profile ai.
+    profiles: ["ai"]
     restart: unless-stopped
     environment:
       TZ: Europe/Amsterdam
@@ -209,6 +214,7 @@ services:
   vla-ollama:
     image: ollama/ollama:latest
     container_name: vla-ollama
+    profiles: ["ai"]
     restart: unless-stopped
     environment:
       OLLAMA_KEEP_ALIVE: "30m"
@@ -227,6 +233,7 @@ services:
       dockerfile: Dockerfile
     image: techflow/vla-ai:latest
     container_name: vla-ai
+    profiles: ["ai"]
     restart: unless-stopped
     environment:
       OLLAMA_URL: "http://vla-ollama:11434"

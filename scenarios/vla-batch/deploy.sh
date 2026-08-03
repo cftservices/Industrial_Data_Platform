@@ -50,6 +50,20 @@ require(){
   if grep -qE "TRAEFIK_ACME_EMAIL=your@email.com" .env; then
     c_y "WAARSCHUWING: TRAEFIK_ACME_EMAIL staat nog op de placeholder (Let's Encrypt cert kan falen)."
   fi
+  check_generated
+}
+
+# The OPC-UA address space, the MonsterMQ ingest list and the fallback connector
+# tables are all generated from factory-model/isa95-vla.json. Deploying a stack
+# whose generated files lag behind the model is how tags silently stop reaching
+# the UNS, so refuse to build. Pure file I/O: no broker, no network.
+check_generated(){
+  command -v python3 >/dev/null || return 0
+  if ! python3 scenarios/vla-batch/tools/gen-connect.py --check; then
+    c_r "Gegenereerde connect-bestanden lopen achter op factory-model/isa95-vla.json."
+    c_y "   Draai:  python3 scenarios/vla-batch/tools/gen-connect.py   en commit het resultaat."
+    exit 1
+  fi
 }
 
 wait_monstermq(){
