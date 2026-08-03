@@ -75,6 +75,23 @@
         "64": "UNCERTAIN",
         "0": "BAD"
       }
+    },
+    "SQL_SERVER": {
+      "label": "SQL Server, polled by our own gateway",
+      "note": [
+        "MonsterMQ has no SQL SOURCE connector. Its complete device list is",
+        "opcUaDevice, opcUaServer, mqttClient, kafkaClient, winCCOaDevice,",
+        "winCCUaDevice, plc4xDevice, natsClient, redisClient, telegramClient,",
+        "neo4jClient and sparkplugBDecoder; jdbcLogger and the other loggers are",
+        "SINKS. So this island needs vla-vendor-gateway, which polls and publishes",
+        "onto the same raw root as everything else.",
+        "",
+        "These are the IT systems, and they matter precisely because they are not",
+        "on the process bus. The business truth about a batch (was it tested, is",
+        "the machine due for maintenance, what did it cost in energy) lives in",
+        "systems no SCADA ever talks to. That is the silo problem in its purest",
+        "form: no protocol gap to blame, just nobody joining the data."
+      ]
     }
   },
   "source_systems": [
@@ -732,6 +749,276 @@
             "mode": "constant",
             "base": 0.0,
             "noise_sigma": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "id": "SRC-LIMS-01",
+      "equipment_id": "lims-01",
+      "area": "Utilities",
+      "archetype": "laboratory-information-system",
+      "vendor": "vendor-b",
+      "description": "Lab system holding the analytical results for incoming milk and in-process samples.",
+      "raw_prefix": "lims-01",
+      "expected_interval_s": 60,
+      "protocol": "SQL_SERVER",
+      "transport": "tds",
+      "endpoint": "vla-vendor-sql:1433/PLANT",
+      "ingest": "gateway-sql",
+      "device_name": "vendor-gateway",
+      "native_timestamp": "column",
+      "native_quality": "none",
+      "enabled": true,
+      "table": "LAB_RESULT",
+      "query": "SELECT SAMPLE_ID, EQ_TAG, PARAM, VALUE, UOM, TAKEN_AT FROM LAB_RESULT WHERE TAKEN_AT > ?",
+      "watermark": "TAKEN_AT",
+      "key_columns": [
+        "EQ_TAG",
+        "PARAM"
+      ],
+      "value_column": "VALUE",
+      "the_pair": [
+        "THE CLEANEST PROOF IN THE WHOLE DEMO, and it needs one line to explain.",
+        "",
+        "The line publishes receiving-tank-01/fat_setpoint_pct. A target. There",
+        "is no measurement anywhere on the UNS to compare it against, so no",
+        "consumer can judge whether standardisation actually worked.",
+        "",
+        "The measurement exists. It is taken every batch, by an instrument that",
+        "works perfectly, and it is stored in a database nobody connected.",
+        "",
+        "Canon 06-Model B.2b: 'target- en actual-waarden bestaan altijd als",
+        "PAAR; een consumer die kwaliteit beoordeelt vergelijkt het paar, nooit",
+        "een kant.' Half of this pair has been invisible the whole time.",
+        "",
+        "Note the canonical tag lands on receiving-tank-01, NOT on lims-01. A",
+        "lab system does not own a measurement, it REPORTS one about an asset.",
+        "Filing it under the lab would keep the pair split, which is the bug."
+      ],
+      "points": [
+        {
+          "native": "RCVT-1.FAT",
+          "description": "fat content of the standardised milk",
+          "datatype": "Double",
+          "native_unit": "%",
+          "native_scale": 1,
+          "canonical_tag_id": "receiving-tank-01:fat_actual_pct",
+          "measures_equipment": "receiving-tank-01",
+          "condition_rule": "R-LIMS-FAT",
+          "pairs_with": "receiving-tank-01:fat_setpoint_pct",
+          "seed": {
+            "eq_tag": "RCVT-1",
+            "param": "FAT",
+            "base": 3.47,
+            "noise": 0.04
+          }
+        },
+        {
+          "native": "RCVT-1.PROTEIN",
+          "description": "protein content",
+          "datatype": "Double",
+          "native_unit": "%",
+          "native_scale": 1,
+          "canonical_tag_id": "receiving-tank-01:protein_pct",
+          "measures_equipment": "receiving-tank-01",
+          "condition_rule": "R-LIMS-PROTEIN",
+          "seed": {
+            "eq_tag": "RCVT-1",
+            "param": "PROTEIN",
+            "base": 3.31,
+            "noise": 0.03
+          }
+        },
+        {
+          "native": "RCVT-1.DRYMATTER",
+          "description": "total dry matter",
+          "datatype": "Double",
+          "native_unit": "%",
+          "native_scale": 1,
+          "canonical_tag_id": "receiving-tank-01:dry_matter_pct",
+          "measures_equipment": "receiving-tank-01",
+          "condition_rule": "R-LIMS-DM",
+          "seed": {
+            "eq_tag": "RCVT-1",
+            "param": "DRYMATTER",
+            "base": 12.6,
+            "noise": 0.08
+          }
+        }
+      ]
+    },
+    {
+      "id": "SRC-CMMS-01",
+      "equipment_id": "cmms-01",
+      "area": "Utilities",
+      "archetype": "maintenance-management-system",
+      "vendor": "vendor-d",
+      "description": "Maintenance system holding open work orders per asset, under its own asset naming.",
+      "raw_prefix": "cmms-01",
+      "expected_interval_s": 60,
+      "protocol": "SQL_SERVER",
+      "transport": "tds",
+      "endpoint": "vla-vendor-sql:1433/PLANT",
+      "ingest": "gateway-sql",
+      "device_name": "vendor-gateway",
+      "native_timestamp": "column",
+      "native_quality": "none",
+      "enabled": true,
+      "table": "WO_HDR",
+      "query": "SELECT EQ_TAG, COUNT(*) AS OPEN_WO FROM WO_HDR WHERE STATUS <> 'CLOSED' GROUP BY EQ_TAG",
+      "watermark": null,
+      "key_columns": [
+        "EQ_TAG"
+      ],
+      "value_column": "OPEN_WO",
+      "the_lesson": [
+        "The purest alias lesson in the set: nothing needs converting.",
+        "",
+        "No units to reconcile, no scaling, no timestamp defect. The ONLY",
+        "problem is that this system calls the cook unit CK-UNIT-1 while the",
+        "line calls it cook-unit-01, and therefore no report has ever put",
+        "maintenance load next to process performance.",
+        "",
+        "That is a mapping table's worth of work, and it has not been done,",
+        "which is why 'we already have all the data' is true and useless."
+      ],
+      "points": [
+        {
+          "native": "CK-UNIT-1",
+          "description": "open work orders on the cook unit",
+          "datatype": "Int64",
+          "native_unit": "",
+          "native_scale": 1,
+          "canonical_tag_id": "cook-unit-01:open_wo_count",
+          "measures_equipment": "cook-unit-01",
+          "condition_rule": "R-CMMS-WO",
+          "seed": {
+            "eq_tag": "CK-UNIT-1",
+            "count": 2
+          }
+        },
+        {
+          "native": "HOM-1101",
+          "description": "open work orders on the homogeniser",
+          "datatype": "Int64",
+          "native_unit": "",
+          "native_scale": 1,
+          "canonical_tag_id": "homogeniser-01:open_wo_count",
+          "measures_equipment": "homogeniser-01",
+          "condition_rule": "R-CMMS-WO",
+          "seed": {
+            "eq_tag": "HOM-1101",
+            "count": 1
+          }
+        },
+        {
+          "native": "CHL-1",
+          "description": "open work orders on the chiller",
+          "datatype": "Int64",
+          "native_unit": "",
+          "native_scale": 1,
+          "canonical_tag_id": "chiller-01:open_wo_count",
+          "measures_equipment": "chiller-01",
+          "condition_rule": "R-CMMS-WO",
+          "seed": {
+            "eq_tag": "CHL-1",
+            "count": 0
+          }
+        },
+        {
+          "native": "FLR-1",
+          "description": "open work orders on the filler",
+          "datatype": "Int64",
+          "native_unit": "",
+          "native_scale": 1,
+          "canonical_tag_id": "filler-01:open_wo_count",
+          "measures_equipment": "filler-01",
+          "condition_rule": "R-CMMS-WO",
+          "seed": {
+            "eq_tag": "FLR-1",
+            "count": 3
+          }
+        }
+      ]
+    },
+    {
+      "id": "SRC-EMS-01",
+      "equipment_id": "ems-01",
+      "area": "Utilities",
+      "archetype": "energy-monitoring-system",
+      "vendor": "vendor-a",
+      "description": "Utility metering. Writes local wall-clock timestamps with no timezone, which is the most common real-world data defect there is.",
+      "raw_prefix": "ems-01",
+      "expected_interval_s": 300,
+      "protocol": "SQL_SERVER",
+      "transport": "tds",
+      "endpoint": "vla-vendor-sql:1433/PLANT",
+      "ingest": "gateway-sql",
+      "device_name": "vendor-gateway",
+      "native_timestamp": "local-no-timezone",
+      "native_quality": "none",
+      "enabled": true,
+      "table": "METER_READING",
+      "query": "SELECT TAG, VALUE, TS_LOCAL FROM METER_READING WHERE TS_LOCAL > ?",
+      "watermark": "TS_LOCAL",
+      "key_columns": [
+        "TAG"
+      ],
+      "value_column": "VALUE",
+      "the_lesson": [
+        "TS_LOCAL is wall-clock with no offset. Twice a year an hour of data is",
+        "either duplicated or missing, and every cost-per-batch number computed",
+        "across that boundary is quietly wrong.",
+        "",
+        "The Condition step does not guess. conditioning.json declares the zone",
+        "to assume and labels the result ts_source=source-assumed-tz, so a",
+        "consumer knows the timestamp was reconstructed rather than measured.",
+        "",
+        "It also closes cost-per-batch: cost_model in isa95-vla.json has no",
+        "energy term today, because there was no energy signal to put in it."
+      ],
+      "points": [
+        {
+          "native": "EM-101.kWh",
+          "description": "line electrical energy",
+          "datatype": "Double",
+          "native_unit": "kWh",
+          "native_scale": 1,
+          "canonical_tag_id": "ems-01:energy_kWh",
+          "condition_rule": "R-EMS-KWH",
+          "seed": {
+            "tag": "EM-101.kWh",
+            "base": 41.5,
+            "noise": 3.0
+          }
+        },
+        {
+          "native": "STM-401.kg",
+          "description": "steam consumed",
+          "datatype": "Double",
+          "native_unit": "kg",
+          "native_scale": 1,
+          "canonical_tag_id": "ems-01:steam_kg",
+          "condition_rule": "R-EMS-STEAM",
+          "seed": {
+            "tag": "STM-401.kg",
+            "base": 180.0,
+            "noise": 12.0
+          }
+        },
+        {
+          "native": "WTR-301.m3",
+          "description": "process water used",
+          "datatype": "Double",
+          "native_unit": "m3",
+          "native_scale": 1,
+          "canonical_tag_id": "ems-01:water_m3",
+          "condition_rule": "R-EMS-WATER",
+          "seed": {
+            "tag": "WTR-301.m3",
+            "base": 6.2,
+            "noise": 0.5
           }
         }
       ]

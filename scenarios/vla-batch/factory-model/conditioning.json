@@ -277,6 +277,62 @@
       "quality_source": "opcua-statuscode",
       "timestamp_source": "source-timestamp",
       "expected_interval_s": 10
+    },
+    "R-LIMS-FAT": {
+      "native_unit": "%",
+      "canonical_unit": "%",
+      "scale": 1.0,
+      "quality_source": "none",
+      "timestamp_source": "column",
+      "expected_interval_s": 60
+    },
+    "R-LIMS-PROTEIN": {
+      "native_unit": "%",
+      "canonical_unit": "%",
+      "scale": 1.0,
+      "quality_source": "none",
+      "timestamp_source": "column",
+      "expected_interval_s": 60
+    },
+    "R-LIMS-DM": {
+      "native_unit": "%",
+      "canonical_unit": "%",
+      "scale": 1.0,
+      "quality_source": "none",
+      "timestamp_source": "column",
+      "expected_interval_s": 60
+    },
+    "R-CMMS-WO": {
+      "native_unit": "",
+      "canonical_unit": "",
+      "scale": 1.0,
+      "quality_source": "none",
+      "timestamp_source": "column",
+      "expected_interval_s": 60
+    },
+    "R-EMS-KWH": {
+      "native_unit": "kWh",
+      "canonical_unit": "",
+      "scale": 1.0,
+      "quality_source": "none",
+      "timestamp_source": "local-no-timezone",
+      "expected_interval_s": 300
+    },
+    "R-EMS-STEAM": {
+      "native_unit": "kg",
+      "canonical_unit": "kg",
+      "scale": 1.0,
+      "quality_source": "none",
+      "timestamp_source": "local-no-timezone",
+      "expected_interval_s": 300
+    },
+    "R-EMS-WATER": {
+      "native_unit": "m3",
+      "canonical_unit": "",
+      "scale": 1.0,
+      "quality_source": "none",
+      "timestamp_source": "local-no-timezone",
+      "expected_interval_s": 300
     }
   }
 }

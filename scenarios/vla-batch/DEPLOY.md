@@ -17,8 +17,8 @@ je die containers niet startte. Sinds de opt-in profiles klopt de tabel wel.
 |---|---|---|---|---|
 | **basis** | `docker compose ... up -d` | fabriek, batch-engine, TDengine, bridge, dashboard, UI, Grafana + slim-base | ~1,4 GB | **2 GB** (4 GB comfortabeler) |
 | **+ ai** | `--profile ai` | `vla-ollama` (4 GB), `vla-tdgpt` (1,5 GB), `vla-ai` | ~7,2 GB | **8 GB** |
-| **+ vendor** | `--profile vendor` | de gesimuleerde leverancierseilanden + conditioner | ~2,2 GB | **4 GB** |
-| **+ vendor-sql** | `--profile vendor-sql` | het SQL Server-eiland | ~3,2 GB | **6 GB** |
+| **+ vendor** | `--profile vendor` | 6 leverancierseilanden (OPC-DA, OPC-UA) + conditioner | ~1,9 GB | **4 GB** |
+| **+ vendor-sql** | `--profile vendor-sql` | SQL Server-eiland + gateway (3 IT-systemen) | ~3,1 GB | **6 GB** |
 
 Profielen stapelen: `--profile vendor --profile vendor-sql` draait beide.
 Zonder profile-vlag krijg je exact de demo van vandaag, ongewijzigd.

@@ -94,7 +94,14 @@ for s in systems:
         if ":" not in tag_id:
             problems.append(f"{tag_id} is not equipment:tag")
         elif tag_id.split(":", 1)[0] != s["equipment_id"]:
-            problems.append(f"{tag_id} does not belong to {s['equipment_id']}")
+            # A lab or maintenance system REPORTS a measurement about another
+            # asset; it does not own it. lims-01's fat reading has to land on
+            # receiving-tank-01 or it never pairs with fat_setpoint_pct, which is
+            # the bug the pair rule exists to prevent. Such points must say so.
+            if p.get("measures_equipment") != tag_id.split(":", 1)[0]:
+                problems.append(
+                    f"{tag_id} is not on {s['equipment_id']} and declares no "
+                    f"measures_equipment")
         if "condition_rule" not in p:
             problems.append(f"{tag_id} has no condition_rule")
 check("7. source-systems.json is internally consistent",
@@ -113,6 +120,8 @@ from lib.point import Point  # noqa: E402
 encode_errors: list[str] = []
 for s in systems:
     for p in s["points"]:
+        if s.get("ingest") == "gateway-sql":
+            continue  # polled from a database, not derived from process state
         point = Point(p)
         try:
             value, _ = point.value({point.source_path: 50.0} if point.source_path else {}, 1.0)

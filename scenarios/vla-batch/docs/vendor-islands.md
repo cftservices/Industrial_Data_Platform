@@ -45,7 +45,7 @@ betekenisloze reeksen wegschrijven.
 
 ## 2. De eilanden
 
-Zes systemen, 31 punten, twee protocollen. Alles generiek: `vendor-a` t/m
+Negen systemen, 41 punten, drie protocollen. Alles generiek: `vendor-a` t/m
 `vendor-f`, geen merknamen, geen modelnummers, geen echte IP's (PR-15).
 
 | Systeem | Area | Protocol | Punten | Waarom het er staat |
@@ -56,6 +56,30 @@ Zes systemen, 31 punten, twee protocollen. Alles generiek: `vendor-a` t/m
 | `chiller-01` | Cooling | OPC-DA | 5 | Alarm-bitfield als kwaliteitsbron |
 | `homogeniser-01` | Mixing | OPC-UA | 6 | **Het bewijs dat OPC-UA niet de data layer is** |
 | `cip-station-01` | Utilities | OPC-UA | 6 | Utility op eigen schema, voedt de bestaande CIP-gate |
+| `lims-01` | Utilities | SQL Server | 3 | **Het paar sluit.** Levert de meting bij `fat_setpoint_pct` |
+| `cmms-01` | Utilities | SQL Server | 4 | **De pure alias-les.** `CK-UNIT-1` is `cook-unit-01` |
+| `ems-01` | Utilities | SQL Server | 3 | Lokale tijd zonder zone, en het sluit kosten-per-batch |
+
+### SQL Server: de silo zonder technisch excuus
+
+MonsterMQ heeft geen SQL-**bron**connector (`jdbcLogger` en verwanten zijn sinks),
+dus `vla-vendor-gateway` pollt deze en publiceert op dezelfde raw-root als de rest.
+Condition en Model weten daardoor niet welk protocol een meting binnenkwam.
+
+Deze drie tellen het zwaarst, juist omdat er geen protocolgat is om de schuld aan
+te geven. De data staat in een database, in een modern formaat, met een prima
+query-interface. En hij is onzichtbaar voor de fabriek, omdat niemand hem heeft
+gekoppeld.
+
+**`lims-01` is het scherpste van de hele demo, in één regel.** De lijn publiceert
+`receiving-tank-01/fat_setpoint_pct`: een target zonder meting. Die meting bestaat
+wel, elke batch, en staat in een database die niemand heeft aangesloten. Canon
+`06-Model §B.2b`: target en actual bestaan altijd als **paar**. De helft van dit
+paar is al die tijd onzichtbaar geweest.
+
+Let op waar de canonieke tag landt: op `receiving-tank-01`, niet op `lims-01`.
+Een labsysteem bezit geen meting, het *rapporteert* er een over een asset.
+Wegschrijven onder het lab zou het paar gescheiden houden, en dat is de bug.
 
 ### OPC-DA: wees eerlijk over wat dit is
 
@@ -229,6 +253,7 @@ want opstarttijd verpest het moment.
 python tools/gen-connect.py --check      # geen drift tussen model en artefacten
 python vendor-sim/selftest.py            # eilanden, vervorming, het conflict
 python conditioner/selftest.py           # Condition, Model, cross-checks
+python vendor-gateway/selftest.py        # de SQL-mapping, met sqlite als stand-in
 python factory/selftest.py               # de physics
 python batch-engine/selftest.py          # de MES-laag
 ```
@@ -264,12 +289,6 @@ Eerlijk, zodat niemand ernaar zoekt:
 - **MQTT-eiland** (`checkweigher-01` met PackML, `case-packer-01` met Sparkplug B)
   op een eigen broker. Zou de per-kop vulgewichten leveren die
   `frontend-uiux-spec.md §13` al tekent en die niets in de stack vandaag maakt.
-- **SQL Server-eiland** (`lims-01`, `cmms-01`, `ems-01`) plus de
-  `vla-vendor-gateway` die het pollt. `lims-01` is de sterkste die nog mist: het
-  levert `fat_actual_pct`, de meting die hoort bij het bestaande
-  `receiving-tank-01/fat_setpoint_pct`. De lijn heeft vandaag een setpoint zonder
-  meting, terwijl die meting bestaat op een systeem dat niemand heeft aangesloten.
-  Canon `06-Model §B.2b`: target en actual bestaan altijd als **paar**.
 - **UI-schermen**: de Connect-kaart en het kwaliteitsscherm in `vla-ui`, plus
   Grafana-panelen op de nieuwe topics.
 - **Datalayer-docs** in `project-os/projects/datalayer`: PR-42 t/m PR-47, UC17
