@@ -48,29 +48,17 @@ esac
 # BEGIN GENERATED TAGS (tools/gen-connect.py), do not edit by hand
 TAGS="
 PT_1101_PV|homogeniser-01/PT_1101_PV
-PT_1101_PV.Q|homogeniser-01/PT_1101_PV.Q
 PT_1102_PV|homogeniser-01/PT_1102_PV
-PT_1102_PV.Q|homogeniser-01/PT_1102_PV.Q
 MTR_1101_SPD|homogeniser-01/MTR_1101_SPD
-MTR_1101_SPD.Q|homogeniser-01/MTR_1101_SPD.Q
 MTR_1101_LOAD|homogeniser-01/MTR_1101_LOAD
-MTR_1101_LOAD.Q|homogeniser-01/MTR_1101_LOAD.Q
 TT_1103_PV|homogeniser-01/TT_1103_PV
-TT_1103_PV.Q|homogeniser-01/TT_1103_PV.Q
 STS_1101|homogeniser-01/STS_1101
-STS_1101.Q|homogeniser-01/STS_1101.Q
 CIP1.Phase|cip-station-01/CIP1.Phase
-CIP1.Phase.Q|cip-station-01/CIP1.Phase.Q
 CIP1.Cond_mS|cip-station-01/CIP1.Cond_mS
-CIP1.Cond_mS.Q|cip-station-01/CIP1.Cond_mS.Q
 CIP1.SupplyTemp_C|cip-station-01/CIP1.SupplyTemp_C
-CIP1.SupplyTemp_C.Q|cip-station-01/CIP1.SupplyTemp_C.Q
 CIP1.ReturnTemp_C|cip-station-01/CIP1.ReturnTemp_C
-CIP1.ReturnTemp_C.Q|cip-station-01/CIP1.ReturnTemp_C.Q
 CIP1.Flow_m3h|cip-station-01/CIP1.Flow_m3h
-CIP1.Flow_m3h.Q|cip-station-01/CIP1.Flow_m3h.Q
 CIP1.ElapsedMin|cip-station-01/CIP1.ElapsedMin
-CIP1.ElapsedMin.Q|cip-station-01/CIP1.ElapsedMin.Q
 "
 # END GENERATED TAGS
 

@@ -5,7 +5,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY condition.py app.py selftest.py ./
+COPY condition.py crosscheck.py app.py selftest.py ./
 
 # Control API: /api/v1/status, /api/v1/model-layer, /api/v1/reload
 EXPOSE 8080

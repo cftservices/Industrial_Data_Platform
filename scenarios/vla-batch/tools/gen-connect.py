@@ -285,10 +285,12 @@ def render_vendor_init(device: str, systems: list[dict], raw_root: str) -> str:
         for p in s["points"]:
             native = p["native"]
             addresses.append((native, f"{prefix}/{native}"))
-            # The DA quality word travels as its own item. A consumer that does
-            # not know the 192/64/0 table cannot judge the value next to it,
-            # which is precisely the point the Condition step then fixes.
-            addresses.append((f"{native}.Q", f"{prefix}/{native}.Q"))
+            # Only a DA island carries its quality as a SEPARATE item. On a
+            # modern UA server the quality is the StatusCode on the value
+            # itself, so asking for a .Q node there requests something that
+            # does not exist: 12 addresses that can never read.
+            if s.get("native_quality") == "da-quality-word":
+                addresses.append((f"{native}.Q", f"{prefix}/{native}.Q"))
 
     out = [
         "#!/bin/sh",

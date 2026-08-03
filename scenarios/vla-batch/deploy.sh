@@ -163,7 +163,29 @@ cmd_vendor(){
     ok=0
   fi
 
-  hr; c_y "4) Conditioner: draait de Model-laag?"; hr
+  hr; c_y "4) Kwaliteitswoorden opnieuw laten publiceren"; hr
+  # GEVERIFIEERD OP DE VPS, 2026-08-03. Het DA-qualityword is in normaal bedrijf
+  # CONSTANT (192), en MonsterMQ's OPC-UA-client publiceert op VERANDERING. Een
+  # conditioner die na de device-registratie start ziet dat woord dus nooit, en
+  # markeert elke DA-waarde terecht als UNCERTAIN omdat hij de kwaliteit niet
+  # kent. Dat is geen bug in de conditioner: nooit GOOD aannemen is precies de
+  # regel die we willen.
+  #
+  # Het is een VOLGORDE-probleem, en volgorde hoort in het deploy-script. Een
+  # toggle forceert een nieuwe subscription en daarmee een herpublicatie van elk
+  # constant item. Zonder deze stap staat de hele DA-kant op UNCERTAIN tot er
+  # toevallig iets verandert.
+  for d in vendor-da vendor-ua; do
+    gql "mutation{opcUaDevice{toggle(name:\\\"$d\\\",enabled:false){success}}}" >/dev/null
+  done
+  sleep 3
+  for d in vendor-da vendor-ua; do
+    gql "mutation{opcUaDevice{toggle(name:\\\"$d\\\",enabled:true){success}}}" >/dev/null
+  done
+  c_g "  subscriptions vernieuwd; constante kwaliteitswoorden zijn opnieuw verstuurd."
+  sleep 8
+
+  hr; c_y "5) Conditioner: draait de Model-laag?"; hr
   local st; st=$(curl_net 8 http://vla-conditioner:8080/api/v1/status)
   echo "  $st"
   if echo "$st" | grep -q '"model_layer_enabled":true'; then
@@ -173,14 +195,14 @@ cmd_vendor(){
     c_r "  conditioner niet bereikbaar of laag uit."; ok=0
   fi
 
-  hr; c_y "5) Komt er gemodelleerde vendor-data op de UNS? (5 msgs, 15s)"; hr
+  hr; c_y "6) Komt er gemodelleerde vendor-data op de UNS? (5 msgs, 15s)"; hr
   local uns; uns=$(docker run --rm --network "$NET" eclipse-mosquitto:latest \
         mosquitto_sub -h monstermq -t 'DairyWorks/Vla/Cook/pasteuriser-01/Status/#' \
         -t 'DairyWorks/Vla/DataQuality/#' -C 5 -W 15 -v 2>/dev/null || true)
   if [ -n "$uns" ]; then c_g "  gemodelleerd:"; echo "$uns" | sed 's/^/    /'
   else c_r "  niets op de UNS vanuit de eilanden. Zie stap 3 en 4."; ok=0; fi
 
-  hr; c_y "6) REGRESSIE: raw mag NIET gearchiveerd worden"; hr
+  hr; c_y "7) REGRESSIE: raw mag NIET gearchiveerd worden"; hr
   # archive-group dairyworks_data matcht DairyWorks/#. Belandt raw daar ooit,
   # dan bouwt deze demo de data-swamp die hij veroordeelt. Twee metingen met 30s
   # ertussen: het aantal mag stijgen door de LIJN, niet door raw/vla.
@@ -197,7 +219,7 @@ cmd_vendor(){
     c_r "  $a raw-documenten in het archief. De raw-root lekt DairyWorks/# in."; ok=0
   fi
 
-  hr; c_y "7) CARDINALITEIT: sub-tables in TDengine"; hr
+  hr; c_y "8) CARDINALITEIT: sub-tables in TDengine"; hr
   # tdengine-poc/bridge.py maakt EEN SUB-TABLE PER TOPIC. Deze stack is hier al
   # een keer door omgevallen (agitator_rpm: 5,34 van 5,35 miljoen rijen), dus
   # leg de baseline vast voordat je uitbreidt.
