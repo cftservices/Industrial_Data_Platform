@@ -9,8 +9,6 @@
 # Usage (from the idp-os root, i.e. the dir with docker-compose.slim.yml):
 #   ./scenarios/vla-batch/deploy.sh up        # build + start the stack (default)
 #   ./scenarios/vla-batch/deploy.sh verify    # health + UNS-flow + device checks
-#   ./scenarios/vla-batch/deploy.sh vendor    # de leverancierseilanden + Condition/Model
-#   ./scenarios/vla-batch/deploy.sh vendor-sql  # alleen het SQL-eiland (zwaarste component)
 #   ./scenarios/vla-batch/deploy.sh smoke     # run one demo batch via the API
 #   ./scenarios/vla-batch/deploy.sh fallback  # switch ingest to the connector
 #   ./scenarios/vla-batch/deploy.sh logs [svc]
@@ -51,20 +49,6 @@ require(){
   fi
   if grep -qE "TRAEFIK_ACME_EMAIL=your@email.com" .env; then
     c_y "WAARSCHUWING: TRAEFIK_ACME_EMAIL staat nog op de placeholder (Let's Encrypt cert kan falen)."
-  fi
-  check_generated
-}
-
-# The OPC-UA address space, the MonsterMQ ingest list and the fallback connector
-# tables are all generated from factory-model/isa95-vla.json. Deploying a stack
-# whose generated files lag behind the model is how tags silently stop reaching
-# the UNS, so refuse to build. Pure file I/O: no broker, no network.
-check_generated(){
-  command -v python3 >/dev/null || return 0
-  if ! python3 scenarios/vla-batch/tools/gen-connect.py --check; then
-    c_r "Gegenereerde connect-bestanden lopen achter op factory-model/isa95-vla.json."
-    c_y "   Draai:  python3 scenarios/vla-batch/tools/gen-connect.py   en commit het resultaat."
-    exit 1
   fi
 }
 
@@ -120,149 +104,6 @@ cmd_verify(){
   return 0
 }
 
-# ---------------------------------------------------------------------------
-# Vendor-eilanden: Connect -> Condition -> Model
-# ---------------------------------------------------------------------------
-# Het primaire pad (cmd_verify) blijft ongemoeid. Dit is een APART commando,
-# want de eilanden draaien achter --profile vendor en horen de bestaande verify
-# niet rood te maken als dat profile uit staat.
-#
-# Drie koppelvlakken zijn nooit buiten een container getest en dit commando is
-# er precies voor:
-#   * leest MonsterMQ de DA/UA-tunneller op ns=2 (de ns-index-aanname)
-#   * ziet de conditioner raw en publiceert hij op de UNS
-#   * praat de gateway TDS met SQL Server (alleen met --profile vendor-sql)
-#
-# Plus twee regressies die stil blijven als je er niet naar kijkt:
-#   * de archive-val: raw/vla/# mag NOOIT in idp.dairyworks_data landen
-#   * de cardinaliteit: de bridge maakt een sub-table PER TOPIC
-cmd_vendor(){
-  require; local ok=1
-  local DCV="$DC --profile vendor"
-
-  hr; c_y "1) Vendor-containers"; hr
-  $DCV ps vla-vendor-opcda vla-vendor-opcua vla-conditioner 2>/dev/null || true
-
-  hr; c_y "2) Vendor-devices geregistreerd in MonsterMQ?"; hr
-  local dev; dev=$(gql "{opcUaDevices{name enabled}}")
-  echo "$dev"
-  for d in vendor-da vendor-ua; do
-    if echo "$dev" | grep -q "\"$d\""; then c_g "  device '$d' aanwezig."
-    else c_r "  device '$d' NIET gevonden — check: $DCV logs vla-vendor-${d#vendor-}-init"; ok=0; fi
-  done
-
-  hr; c_y "3) Stroomt raw/vla/# ? (8 msgs, 15s)"; hr
-  local raw; raw=$(docker run --rm --network "$NET" eclipse-mosquitto:latest \
-        mosquitto_sub -h monstermq -t 'raw/vla/#' -C 8 -W 15 -v 2>/dev/null || true)
-  if [ -n "$raw" ]; then
-    c_g "  raw stroomt (en is met opzet onleesbaar):"; echo "$raw" | sed 's/^/    /'
-  else
-    c_r "  GEEN raw-berichten. Meest waarschijnlijk de ns-index-aanname."
-    c_y "     -> $DCV logs vla-vendor-opcda | grep -i namespace"
-    c_y "     -> $DC logs monstermq | grep -i opcua"
-    ok=0
-  fi
-
-  hr; c_y "4) Kwaliteitswoorden opnieuw laten publiceren"; hr
-  # GEVERIFIEERD OP DE VPS, 2026-08-03. Het DA-qualityword is in normaal bedrijf
-  # CONSTANT (192), en MonsterMQ's OPC-UA-client publiceert op VERANDERING. Een
-  # conditioner die na de device-registratie start ziet dat woord dus nooit, en
-  # markeert elke DA-waarde terecht als UNCERTAIN omdat hij de kwaliteit niet
-  # kent. Dat is geen bug in de conditioner: nooit GOOD aannemen is precies de
-  # regel die we willen.
-  #
-  # Het is een VOLGORDE-probleem, en volgorde hoort in het deploy-script. Een
-  # toggle forceert een nieuwe subscription en daarmee een herpublicatie van elk
-  # constant item. Zonder deze stap staat de hele DA-kant op UNCERTAIN tot er
-  # toevallig iets verandert.
-  for d in vendor-da vendor-ua; do
-    gql "mutation{opcUaDevice{toggle(name:\\\"$d\\\",enabled:false){success}}}" >/dev/null
-  done
-  sleep 3
-  for d in vendor-da vendor-ua; do
-    gql "mutation{opcUaDevice{toggle(name:\\\"$d\\\",enabled:true){success}}}" >/dev/null
-  done
-  c_g "  subscriptions vernieuwd; constante kwaliteitswoorden zijn opnieuw verstuurd."
-  sleep 8
-
-  hr; c_y "5) Conditioner: draait de Model-laag?"; hr
-  local st; st=$(curl_net 8 http://vla-conditioner:8080/api/v1/status)
-  echo "  $st"
-  if echo "$st" | grep -q '"model_layer_enabled":true'; then
-    c_g "  Model-laag aan."
-    echo "$st" | grep -q '"published":0' && { c_y "  maar published=0: er is nog niets doorgezet."; ok=0; }
-  else
-    c_r "  conditioner niet bereikbaar of laag uit."; ok=0
-  fi
-
-  hr; c_y "6) Komt er gemodelleerde vendor-data op de UNS? (5 msgs, 15s)"; hr
-  local uns; uns=$(docker run --rm --network "$NET" eclipse-mosquitto:latest \
-        mosquitto_sub -h monstermq -t 'DairyWorks/Vla/Cook/pasteuriser-01/Status/#' \
-        -t 'DairyWorks/Vla/DataQuality/#' -C 5 -W 15 -v 2>/dev/null || true)
-  if [ -n "$uns" ]; then c_g "  gemodelleerd:"; echo "$uns" | sed 's/^/    /'
-  else c_r "  niets op de UNS vanuit de eilanden. Zie stap 3 en 4."; ok=0; fi
-
-  hr; c_y "7) REGRESSIE: raw mag NIET gearchiveerd worden"; hr
-  # archive-group dairyworks_data matcht DairyWorks/#. Belandt raw daar ooit,
-  # dan bouwt deze demo de data-swamp die hij veroordeelt. Twee metingen met 30s
-  # ertussen: het aantal mag stijgen door de LIJN, niet door raw/vla.
-  local mongo_count
-  mongo_count(){ docker exec mongo mongosh --quiet idp --eval \
-      "db.getCollection('dairyworks_data').countDocuments({topic:/^raw\\/vla/})" 2>/dev/null || echo "n/a"; }
-  local a; a=$(mongo_count)
-  if [ "$a" = "n/a" ]; then
-    c_y "  kon Mongo niet bevragen (container heet anders?), check handmatig:"
-    c_y "     db.dairyworks_data.countDocuments({topic:/^raw\\/vla/})   moet 0 zijn"
-  elif [ "$a" = "0" ]; then
-    c_g "  0 raw-documenten in idp.dairyworks_data. Goed: raw wordt niet opgeslagen."
-  else
-    c_r "  $a raw-documenten in het archief. De raw-root lekt DairyWorks/# in."; ok=0
-  fi
-
-  hr; c_y "8) CARDINALITEIT: sub-tables in TDengine"; hr
-  # tdengine-poc/bridge.py maakt EEN SUB-TABLE PER TOPIC. Deze stack is hier al
-  # een keer door omgevallen (agitator_rpm: 5,34 van 5,35 miljoen rijen), dus
-  # leg de baseline vast voordat je uitbreidt.
-  local tdpass; tdpass=$(grep -E '^TD_PASS=' .env 2>/dev/null | cut -d= -f2-); tdpass="${tdpass:-taosdata}"
-  local n; n=$(curl_net 8 -u "root:${tdpass}" \
-      -d "select count(*) from information_schema.ins_tables where db_name='idp'" \
-      http://vla-tdengine:6041/rest/sql)
-  echo "  $n"
-  c_y "  Noteer dit getal. Groeit het sneller dan het aantal nieuwe topics, dan"
-  c_y "  lekt raw/vla in MQTT_TOPICS van vla-tdengine-bridge."
-
-  hr
-  [ "$ok" = 1 ] && c_g "VENDOR-VERIFY: de keten Connect -> Condition -> Model staat." \
-                || c_r "VENDOR-VERIFY: aandachtspunten hierboven."
-  return 0
-}
-
-# Alleen het SQL-eiland. Apart, want dat draait achter --profile vendor-sql en
-# is de zwaarste component: je wilt hem niet per ongeluk starten.
-cmd_vendor_sql(){
-  require; local ok=1
-  hr; c_y "1) SQL Server bereikbaar?"; hr
-  $DC --profile vendor-sql ps vla-vendor-sql 2>/dev/null || true
-  hr; c_y "2) Publiceert de gateway op raw/vla/{lims,cmms,ems}-01/# ? (5 msgs, 90s)"; hr
-  # Poll-intervallen zijn 60s (lims, cmms) en 300s (ems), dus wachten hoort erbij.
-  local raw; raw=$(docker run --rm --network "$NET" eclipse-mosquitto:latest \
-        mosquitto_sub -h monstermq -t 'raw/vla/lims-01/#' -t 'raw/vla/cmms-01/#' \
-        -t 'raw/vla/ems-01/#' -C 5 -W 90 -v 2>/dev/null || true)
-  if [ -n "$raw" ]; then c_g "  SQL-eiland stroomt:"; echo "$raw" | sed 's/^/    /'
-  else c_r "  niets van het SQL-eiland. Check: $DC --profile vendor-sql logs vla-vendor-gateway"; ok=0; fi
-  hr; c_y "3) Sluit het paar? fat_setpoint_pct naast fat_actual_pct"; hr
-  local pair; pair=$(docker run --rm --network "$NET" eclipse-mosquitto:latest \
-        mosquitto_sub -h monstermq -t 'DairyWorks/Vla/Receiving/receiving-tank-01/Status/fat_+' \
-        -C 2 -W 90 -v 2>/dev/null || true)
-  if echo "$pair" | grep -q fat_actual_pct; then
-    c_g "  het paar is compleet:"; echo "$pair" | sed 's/^/    /'
-  else
-    c_y "  fat_actual_pct nog niet gezien (lab pollt elke 60s)."; fi
-  hr
-  [ "$ok" = 1 ] && c_g "VENDOR-SQL: OK." || c_r "VENDOR-SQL: aandachtspunten hierboven."
-  return 0
-}
-
 cmd_smoke(){
   require
   hr; c_y "Smoke-test: één demo-batch via de batch-engine API"; hr
@@ -297,8 +138,6 @@ cmd_down(){ $DC down; c_g "Gestopt (volumes behouden)."; }
 case "${1:-up}" in
   up) cmd_up ;;
   verify) cmd_verify ;;
-  vendor) cmd_vendor ;;
-  vendor-sql) cmd_vendor_sql ;;
   smoke) cmd_smoke ;;
   fallback) cmd_fallback ;;
   logs) shift || true; cmd_logs "${1:-}" ;;

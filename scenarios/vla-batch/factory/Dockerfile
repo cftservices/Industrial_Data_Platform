@@ -5,7 +5,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY physics.py server.py selftest.py _generated_tags.py ./
+COPY physics.py server.py selftest.py ./
 
 # OPC-UA endpoint (the "black box with SCADA buttons")
 EXPOSE 4840
