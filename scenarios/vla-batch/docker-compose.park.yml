@@ -448,6 +448,35 @@ services:
         condition: service_healthy
     profiles: ["park", "park-slim"]
 
+  # Storingsscenario's die vanzelf lopen, op BATCHOVERGANGEN en niet op een
+  # wandklok: een scenario dat op minuten tikt loopt uit de pas met een
+  # fabriek die je hebt versneld of stilgezet. De cursor staat in Mongo,
+  # zodat een herstart hervat in plaats van de curve opnieuw op te bouwen.
+  vla-park-scenario:
+    build:
+      context: ./scenarios/vla-batch/park-scenario
+      dockerfile: Dockerfile
+    image: techflow/vla-park-scenario:latest
+    container_name: vla-park-scenario
+    restart: unless-stopped
+    environment:
+      MQTT_HOST: monstermq
+      MQTT_PORT: "1883"
+      SCENARIO_DIR: /scenarios
+      BATCH_ENGINE_URL: http://vla-batch-engine:8000
+      MONGO_URL: mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/?authSource=admin
+      MONGO_DB: ${MONGO_DB:-idp}
+    volumes:
+      - ./scenarios/vla-batch/park-scenario/scenarios:/scenarios:ro
+    mem_limit: 128m
+    cpus: 0.10
+    networks:
+      - idp-network
+    depends_on:
+      monstermq:
+        condition: service_healthy
+    profiles: ["park", "park-slim"]
+
   # Eigen database idp_park met KEEP 90d. Zonder retentie loopt 100 GB in
   # ongeveer achttien maanden vol, en dat legt de demo op een zondag om.
   vla-park-tdengine-bridge:

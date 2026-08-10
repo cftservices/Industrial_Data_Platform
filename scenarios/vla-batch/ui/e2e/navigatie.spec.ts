@@ -25,6 +25,7 @@ const SCHERMEN = [
   { pad: "/alarms", naam: "Alarmen" },
   { pad: "/shopfloor", naam: "Werkvloer" },
   { pad: "/scada", naam: "SCADA" },
+  { pad: "/storingen", naam: "Storingen" },
 ];
 
 test("elk scherm staat in de zijbalk en is bereikbaar vanaf de landing", async ({ page }) => {

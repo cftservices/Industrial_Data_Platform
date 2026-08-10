@@ -30,6 +30,7 @@ const OPS: Item[] = [
   { href: "/alarms", label: "Alarmen", hint: "Bevestigen en parkeren" },
   { href: "/shopfloor", label: "Werkvloer", hint: "Scannen, wegen, boeken, verzenden" },
   { href: "/scada", label: "SCADA", hint: "Setpoints, batches, simulatie" },
+  { href: "/storingen", label: "Storingen", hint: "Storingen inschieten op lijn Vla-B" },
 ];
 
 const MGMT: Item[] = [

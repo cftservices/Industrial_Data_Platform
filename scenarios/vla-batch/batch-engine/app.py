@@ -18,7 +18,7 @@ import logging
 import os
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
@@ -30,6 +30,7 @@ from vla.db import get_db, seed_recipes
 from vla.equipment import EQUIPMENT_IDS, CipRequired, EquipmentMonitor
 from vla.handling import HandlingUnitManager
 from vla.opcua_control import OpcuaControl
+from vla.park_control import ParkControl
 from vla.orders import OrderManager
 from vla.period_reports import (assemble_equipment_report,
                                 assemble_period_report, render_equipment_pdf,
@@ -215,11 +216,18 @@ def _startup() -> None:
         log.warning("bus start failed (%s) — continuing offline", e)
     # PRIMARY control path: direct OPC-UA to the factory (offline-safe no-op).
     control = OpcuaControl()
+    # Lijn Vla-B. Offline-veilig: zonder park-model blijft de catalogus leeg en
+    # geven de routes een nette 503 in plaats van een stacktrace.
+    park = ParkControl(
+        model_dir=os.environ.get("PARK_MODEL_DIR", "/model"),
+        mqtt_publish=(lambda t, p: bus.client.publish(t, p, qos=0))
+        if getattr(bus, "client", None) else None)
     seed_recipes(db)
     orders = OrderManager(db, bus)
     equipment = EquipmentMonitor(db, bus)
     runner = BatchRunner(db, bus, control=control, orders=orders, equipment=equipment)
-    STATE.update({"db": db, "bus": bus, "control": control, "orders": orders,
+    STATE.update({"db": db, "bus": bus, "control": control, "park": park,
+                  "orders": orders,
                   "runner": runner, "scan": ScanFlow(db, runner, orders),
                   "handling": HandlingUnitManager(db), "equipment": equipment})
     log.info("batch-engine ready (db=%s, mqtt=%s, opcua=%s)",
@@ -775,3 +783,59 @@ def ship_hu(hu_id: str, body: HuAction):
 @app.get(f"{API}/hu")
 def list_hus(batch_id: str | None = Query(default=None)):
     return _handling().list_hus(batch_id)
+
+
+# ── STORINGEN, lijn Vla-B ────────────────────────────────────────────────────
+#
+# Het convergentiepunt van drie van de vier ingangen: het UI-paneel en de
+# scenario-runner komen hier binnen, en MQTT gaat er met opzet omheen omdat een
+# MQTT-client moet werken zonder dat deze laag draait. Alle vier landen op
+# dezelfde FaultInjector in de machine.
+
+def _park():
+    p = STATE.get("park")
+    if p is None:
+        raise HTTPException(status_code=503, detail={
+            "message": "park-control niet beschikbaar (draait het park?)",
+            "reason": "park_unavailable"})
+    return p
+
+
+@app.get(f"{API}/park/faults")
+def park_faults():
+    """De storingscatalogus plus wat er nu actief staat.
+
+    De catalogus is gegenereerd uit het FAULTS-attribuut van de physics-klassen,
+    dus hij kan geen storing tonen die de fysica niet implementeert. Een knop
+    die niets doet is erger dan geen knop.
+    """
+    return _park().catalogue()
+
+
+@app.post(f"{API}/park/{{equipment_id}}/fault")
+def park_inject(equipment_id: str, body: dict = Body(...)):
+    fault_id = str(body.get("fault") or body.get("fault_id") or "").strip()
+    if not fault_id:
+        raise HTTPException(status_code=400, detail={
+            "message": "veld 'fault' ontbreekt", "reason": "missing_fault"})
+    try:
+        magnitude = float(body.get("magnitude", 1.0))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail={
+            "message": "magnitude moet een getal tussen 0 en 1 zijn",
+            "reason": "bad_magnitude"})
+    res = _park().inject(equipment_id, fault_id, magnitude)
+    if not res.get("ok") and res.get("error"):
+        raise HTTPException(status_code=400, detail=res)
+    return res
+
+
+@app.delete(f"{API}/park/{{equipment_id}}/fault/{{fault_id}}")
+def park_clear(equipment_id: str, fault_id: str):
+    return _park().clear(equipment_id, None if fault_id in ("all", "*") else fault_id)
+
+
+@app.post(f"{API}/park/clear-all")
+def park_clear_all():
+    """Alles uit. De knop die je na een demo wilt hebben."""
+    return _park().clear_all()
