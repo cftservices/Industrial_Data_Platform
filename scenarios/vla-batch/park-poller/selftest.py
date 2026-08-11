@@ -36,6 +36,7 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(IDP, "packml-sim"))
 sys.path.insert(0, os.path.join(ROOT, "park-conditioner"))
 
+import poller  # noqa: E402
 from poller import decode  # noqa: E402
 
 results = []
@@ -181,6 +182,58 @@ def main():
         import traceback
         check("5. ECHTE Modbus round-trip", False,
               "exception: %s\n%s" % (e, traceback.format_exc()[:600]))
+
+    # --- 7. de sampling classes worden nageleefd -----------------------------
+    # Zonder dit stond blend-tank-01 op 58 msg/s waar het budget 6,2 is: alle
+    # registers plus alle .Q-companions, elke seconde, ongeacht klasse. Een
+    # poller die alles op tickfrequentie uitstoot is niet stuk, hij is verkeerd
+    # geconfigureerd, en dat merk je alleen als je telt.
+    if mb:
+        machine = machines[0]
+        rs = [r for r in mb if r["source_system"] == machine]
+        sched = poller.Schedule(1.0)
+        n = nq = 0
+        for t in range(60):
+            for i, r in enumerate(rs):
+                # onchange-punten laten we OPZETTELIJK vaak wisselen (elke 7 s).
+                # Dat is pessimistischer dan de werkelijkheid; haalt hij het
+                # hier, dan haalt hij het altijd.
+                v = (t // 7) if r.get("sampling_class") == "onchange" \
+                    else float(t) + i
+                if sched.publish_due(r["native_name"], r, v, float(t)):
+                    n += 1
+                if r.get("quality_topic_suffix") and \
+                        sched.quality_due(r["native_name"] + ".Q", 192, float(t)):
+                    nq += 1
+        rate = (n + nq) / 60.0
+        naive = len(rs) * 2.0
+        check("7. sampling classes worden nageleefd", rate <= 10.0,
+              "%s: %.1f msg/s over 60 s (naief %.0f, dus %.0fx minder). "
+              "Budget uit het model: %.1f"
+              % (machine, rate, naive, naive / rate if rate else 0,
+                 poller.budget_msg_s(rs)))
+
+        # --- 8. wat NIET uitgesteld mag worden ------------------------------
+        # Een kwaliteitswissel en een toestandswissel zijn geen ruis. Zou de
+        # planner die op de klok zetten, dan zie je een storing pas een halve
+        # minuut later, en dan is de demo het argument kwijt.
+        s2 = poller.Schedule(1.0)
+        oc = next((r for r in rs if r.get("sampling_class") == "onchange"), None)
+        s2.quality_due("x.Q", 192, 0.0)
+        q_direct = s2.quality_due("x.Q", 0, 0.5)
+        q_stil = s2.quality_due("x.Q", 0, 1.0)
+        if oc:
+            s2.publish_due(oc["native_name"], oc, 1, 0.0)
+            v_stil = s2.publish_due(oc["native_name"], oc, 1, 1.0)
+            v_direct = s2.publish_due(oc["native_name"], oc, 2, 1.5)
+        else:
+            v_stil, v_direct = False, True
+        check("8. kwaliteits- en toestandswissels gaan meteen door",
+              q_direct and not q_stil and v_direct and not v_stil,
+              "kwaliteit 192->0 na 0,5 s: %s (moet True), daarna stil: %s "
+              "(moet False) | toestand ongewijzigd: %s (moet False), "
+              "gewijzigd: %s (moet True)"
+              % (q_direct, q_stil, v_stil, v_direct))
 
     return _report()
 

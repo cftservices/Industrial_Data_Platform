@@ -113,13 +113,52 @@ dus geen instelling die dit temt. De keuze ligt bij ons:
 2. **`RAW_PUBLISH=mqtt` op de OPC-machines.** De sim publiceert dan zelf, zoals
    `filler-01`, en je zit meteen op het budget. Kost je wel het OPC-UA-ingestpad,
    en dat is een dragend deel van het verhaal.
-3. **De poller repareren.** Die 58 msg/s van `blend-tank-01` is van onszelf:
-   `park-poller` leest elke seconde alle registers plus de `.Q`-companions en
-   publiceert alles, ongeacht de sampling class of of er iets veranderd is. Dit
-   is de enige van de drie die volledig in eigen beheer is.
+3. **De poller repareren.** ✅ **GEDAAN, zie hieronder.**
 
 Voor twaalf machines is 1 alleen houdbaar als de broker het trekt; meet dat
 voordat je opschaalt.
+
+### De poller is gerepareerd (2026-08-11)
+
+`park-poller` las elke seconde alle registers plus alle `.Q`-companions en
+publiceerde alles, ongeacht de sampling class of er iets veranderd was. Dat is
+geen kapotte poller, dat is een verkeerd geconfigureerde poller, en je merkt het
+alleen als je telt.
+
+`Schedule` in `poller.py` doet nu wat het sjabloon al zei:
+
+| klasse | gedrag |
+|---|---|
+| fast / normal / slow | één bericht per 1 / 5 / 30 s |
+| onchange | bij elke wijziging, plus een hartslag van 60 s |
+| `.Q`-companion | bij elke kwaliteitswissel meteen, plus een hartslag van 30 s |
+
+Twee grenzen zijn met opzet blijven staan. **Dit is geen deadband**: die werkt
+op engineering-waarden en hoort in de conditioner, en die scheiding is precies
+wat de demo betoogt. En **een kwaliteits- of toestandswissel wordt nooit
+uitgesteld**, want anders zie je een storing pas een halve minuut later.
+
+De klasse zelf staat nu in `park-conditioning.json` (`sampling_class`), want uit
+`expected_interval_s: 60` alleen kun je "onchange met hartslag" niet
+onderscheiden van "elke 60 s cyclisch". De conditioner kijkt er niet naar.
+
+Gemeten resultaat, zelfde meting als hierboven:
+
+| machine | transport | voor | na |
+|---|---|---:|---:|
+| `blend-tank-01` | Modbus via `park-poller` | 58,0 /s | **6,2 /s** |
+| `filler-01` | MQTT, sim publiceert zelf | 6,5 /s | 6,2 /s |
+| `separator-01` | OPC UA via MonsterMQ | 35,5 /s | 60,3 /s |
+| `pasteuriser-01` | OPC-DA via MonsterMQ | 125,1 /s | 196,6 /s |
+
+De poller zit nu **exact op de machine die zichzelf publiceert**. Dat de twee
+OPC-machines ondertussen omhoog gingen bevestigt de diagnose alleen maar: hun
+tempo hangt niet aan onze code maar aan de leeslus van MonsterMQ, en dat tempo
+fluctueert. 95% van de resterende 269 msg/s komt van die twee.
+
+Bewaakt door check 7 en 8 in `park-poller/selftest.py`: 7 simuleert 60 seconden
+met opzettelijk vaak wisselende toestanden en faalt boven 10 msg/s, 8 controleert
+dat een kwaliteits- en een toestandswissel er meteen doorheen gaan.
 
 ## Terzijde, gevonden tijdens dezelfde meting: een stille poller
 

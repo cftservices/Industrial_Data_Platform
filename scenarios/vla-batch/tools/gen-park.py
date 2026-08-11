@@ -337,6 +337,11 @@ def conditioning_rule(tag, template, profiles):
         "timestamp_source": ts["source"],
         "ts_source_label": ts["ts_source_label"],
         "deadband": tag["deadband"],
+        # De klasse ZELF, niet alleen het interval eruit. Een poller moet
+        # "onchange met 60 s hartslag" kunnen onderscheiden van "elke 60 s
+        # cyclisch", en uit expected_interval_s=60 volgt dat niet. De
+        # conditioner kijkt hier niet naar; dit is er voor de connectoren.
+        "sampling_class": tag["sampling_class"],
         "expected_interval_s": expected_s,
         "stale_after_s": max(3.0 * expected_s, 30.0),
     }

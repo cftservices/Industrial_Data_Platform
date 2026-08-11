@@ -32,6 +32,107 @@ log = logging.getLogger("park-poller")
 MODEL_DIR = os.environ.get("MODEL_DIR", "/model")
 RAW_ROOT = os.environ.get("RAW_ROOT", "raw/vla-park")
 
+# Hartslag van de kwaliteitscompanions. Zie Schedule hieronder.
+QUALITY_KEEPALIVE_S = float(os.environ.get("QUALITY_KEEPALIVE_S", "30"))
+# De snelheid van de pollus zelf. Sneller dan dit kan geen enkele klasse.
+TICK_S = float(os.environ.get("POLL_INTERVAL_S", "1.0"))
+
+
+# ---------------------------------------------------------------------- tempo
+
+class Schedule:
+    """Houdt per punt bij wanneer het weer de bus op mag.
+
+    Dit is GEEN deadband. Een deadband werkt op engineering-waarden en hoort in
+    de conditioner; die grens blijft staan. Dit is de sampling class uit
+    `signal-template.json` naleven, en dat is niets anders dan de connector
+    goed configureren. Een teller die per 30 s ververst elke seconde uitlezen
+    levert geen extra informatie op, alleen extra berichten.
+
+    Waarom dit er niet meteen in zat: gemeten op 2026-08-11 stond
+    `blend-tank-01` op 58 msg/s waar het budget 6,2 is. Alle 30 registers plus
+    30 .Q-companions, elke seconde, ongeacht klasse of verandering. Ter
+    vergelijking: `filler-01` publiceert zelf, respecteert de klassen wel, en
+    zit op 6,5 msg/s.
+
+    Twee soorten punten:
+
+      - cyclisch (fast 1 s / normal 5 s / slow 30 s): elk interval één bericht,
+        ongeacht de waarde. Wat daarna nog overbodig is filtert de deadband van
+        de conditioner eruit, en dat blijft zichtbaar in zijn teller.
+      - onchange (toestand, setpoints, alarmwoord): zodra de waarde verandert,
+        plus een hartslag van `expected_interval_s`. Zonder die hartslag is een
+        constante toestand onzichtbaar voor een conditioner die later opstart.
+        Dat is exact de val waar de .Q-companions eerder in liepen.
+
+    Een kwaliteitswissel wordt NOOIT uitgesteld, dezelfde regel als in de
+    conditioner: een deadband mag een waarde onderdrukken, een
+    kwaliteitsverandering nooit.
+    """
+
+    def __init__(self, tick_s=1.0):
+        self.tick_s = float(tick_s)
+        self._last_pub = {}
+        self._last_val = {}
+
+    @staticmethod
+    def _spec(rule):
+        cls = rule.get("sampling_class") or "normal"
+        return cls == "onchange", float(rule.get("expected_interval_s") or 5.0)
+
+    def acquire_due(self, key, rule, now):
+        """Moet deze waarde nu worden OPGEHAALD?
+
+        Alleen zinvol voor REST, waar elk punt een eigen request kost. Bij
+        Modbus lezen we sowieso het hele registerblok in één transactie, dus
+        daar valt niets te besparen aan de leeskant.
+        """
+        on_change, interval = self._spec(rule)
+        last = self._last_pub.get(key)
+        if last is None:
+            return True
+        return (now - last) >= (self.tick_s if on_change else interval) - 1e-6
+
+    def publish_due(self, key, rule, value, now):
+        on_change, interval = self._spec(rule)
+        last = self._last_pub.get(key)
+        if last is None:
+            return self._mark(key, value, now)
+        if on_change:
+            if value != self._last_val.get(key) or (now - last) >= interval:
+                return self._mark(key, value, now)
+            return False
+        if (now - last) >= interval - 1e-6:
+            return self._mark(key, value, now)
+        return False
+
+    def quality_due(self, key, value, now):
+        last = self._last_pub.get(key)
+        if (last is None or value != self._last_val.get(key)
+                or (now - last) >= QUALITY_KEEPALIVE_S - 1e-6):
+            return self._mark(key, value, now)
+        return False
+
+    def _mark(self, key, value, now):
+        self._last_pub[key] = now
+        self._last_val[key] = value
+        return True
+
+
+def budget_msg_s(rules):
+    """Wat deze regels bij naleving zouden kosten, in msg/s.
+
+    Voor onchange-punten is dit de ONDERGRENS: de hartslag. Elke echte
+    verandering komt daar bovenop, en dat hoort ook zo.
+    """
+    total = 0.0
+    for r in rules:
+        _, interval = Schedule._spec(r)
+        total += 1.0 / interval if interval else 0.0
+        if r.get("quality_topic_suffix"):
+            total += 1.0 / QUALITY_KEEPALIVE_S
+    return total
+
 
 # ------------------------------------------------------------------ decoderen
 
@@ -76,6 +177,7 @@ class ModbusTarget:
         self.device_id = int(os.environ.get("MODBUS_UNIT_ID", "1"))
         self.client = None
         self.ok = False
+        self.sched = Schedule(TICK_S)
 
     def connect(self):
         from pymodbus.client import ModbusTcpClient
@@ -112,6 +214,9 @@ class ModbusTarget:
             if 0 <= i < len(regs):
                 status = regs[i]
 
+        # Het hele blok is in één transactie binnen; wat er nu nog gebeurt is
+        # alleen beslissen wat er de bus op mag. Zie Schedule.
+        now = time.monotonic()
         out = []
         for r in self.rules:
             i = r["modbus_addr"] - self.base
@@ -119,15 +224,19 @@ class ModbusTarget:
             if i < 0 or i + w > len(regs):
                 continue
             value = decode(regs[i:i + w], r["modbus_encoding"])
-            topic = "%s/%s/%s" % (RAW_ROOT, self.machine, r["native_name"])
+            key = r["native_name"]
+            topic = "%s/%s/%s" % (RAW_ROOT, self.machine, key)
             # Geen tijdstempel: Modbus heeft er geen. De conditioner gebruikt
             # aankomsttijd en LABELT dat ook zo. Er hier een verzinnen zou een
             # precisie suggereren die niet bestaat.
-            out.append((topic, json.dumps({"v": value})))
+            if self.sched.publish_due(key, r, value, now):
+                out.append((topic, json.dumps({"v": value})))
             if status is not None:
                 # Eén statuswoord voor het hele apparaat, uitgewaaierd over alle
                 # signalen. Zo hoeft de conditioner niets van Modbus te weten.
-                out.append(("%s.Q" % topic, str(STATUS_TO_RAW.get(status, 2))))
+                qraw = STATUS_TO_RAW.get(status, 2)
+                if self.sched.quality_due(key + ".Q", qraw, now):
+                    out.append(("%s.Q" % topic, str(qraw)))
         return out
 
 
@@ -143,21 +252,35 @@ class RestTarget:
             "REST_URL_%s" % machine.replace("-", "_").upper(),
             "http://%s:8000" % machine)
         self.session = None
+        self.sched = Schedule(TICK_S)
 
     def poll(self):
         import urllib.error
         import urllib.request
+        now = time.monotonic()
         out = []
         for r in self.rules:
-            url = "%s/tags/%s/current" % (self.base_url, r["native_name"])
+            key = r["native_name"]
+            # Bij REST kost elk punt een eigen request. Een teller die per 30 s
+            # ververst elke seconde ophalen belast niet alleen de bus maar ook
+            # de machine, en dat is bij een OEM-gateway precies het verschil
+            # tussen meelezen en in de weg lopen.
+            if not self.sched.acquire_due(key, r, now):
+                continue
+            url = "%s/tags/%s/current" % (self.base_url, key)
             try:
                 with urllib.request.urlopen(url, timeout=3) as resp:
                     body = json.loads(resp.read().decode("utf-8"))
             except (urllib.error.URLError, ValueError, OSError) as e:
                 log.debug("%s: %s onbereikbaar (%s)", self.machine, url, e)
                 continue
-            topic = "%s/%s/%s" % (RAW_ROOT, self.machine, r["native_name"])
-            out.append((topic, json.dumps(body)))
+            # Vergelijken op de WAARDE en niet op de hele payload: die draagt
+            # een tijdstempel dat elke poll verandert, en dan is "onchange"
+            # altijd waar.
+            mark = body.get("value") if isinstance(body, dict) else body
+            if self.sched.publish_due(key, r, mark, now):
+                topic = "%s/%s/%s" % (RAW_ROOT, self.machine, key)
+                out.append((topic, json.dumps(body)))
         return out
 
 
@@ -191,7 +314,13 @@ def main():
     if not targets:
         log.warning("geen pollbare machines in het model; niets te doen")
     for t in targets:
-        log.info("doel: %s (%s)", t.machine, type(t).__name__)
+        log.info("doel: %s (%s), %d punten, budget %.1f msg/s",
+                 t.machine, type(t).__name__, len(t.rules),
+                 budget_msg_s(t.rules))
+    if targets:
+        log.info("samen %.1f msg/s bij naleving van de sampling classes; "
+                 "meet met mosquitto_sub -t '%s/#' als je twijfelt",
+                 sum(budget_msg_s(t.rules) for t in targets), RAW_ROOT)
 
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="vla-park-poller")
     user = os.environ.get("MQTT_USERNAME")
