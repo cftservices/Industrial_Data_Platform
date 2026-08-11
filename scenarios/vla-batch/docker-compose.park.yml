@@ -334,6 +334,9 @@ services:
       RAW_ROOT: raw/vla-park
       MODBUS_PORT: "5020"
       POLL_INTERVAL_S: "1.0"
+      MODBUS_HOST_BLEND_TANK_01: vla-blend-tank-01
+      MODBUS_HOST_PREHEATER_01: vla-preheater-01
+      REST_URL_BOTTLE_FILLER_01: http://vla-bottle-filler-01:8000
     volumes:
       - ./scenarios/vla-batch/factory-model:/model:ro
     mem_limit: 128m

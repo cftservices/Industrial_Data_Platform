@@ -152,6 +152,64 @@ if [ -f monstermq-init/init-park.sh ]; then
   fi
 fi
 
+# ------------------- 5. de poller weet elke gepollde machine te BEREIKEN
+# Modbus en REST pushen niet, dus als de poller de host niet kan resolven
+# gebeurt er precies niets: geen crash, geen restart-loop, geen ongemapt topic.
+# Stilte lijkt op een machine die stilstaat. Op 2026-08-11 had blend-tank-01
+# daardoor nog nooit een byte geleverd terwijl de container gezond draaide en
+# de Modbus-server keurig op 5020 luisterde. De fallback in poller.py is het
+# kale equipment_id, en dat is nooit de containernaam. Dus: voor elke gepollde
+# machine moet er een expliciete host in de compose staan die exact gelijk is
+# aan de container_name uit het model.
+echo "[check] pollers kunnen hun machines bereiken..."
+PARK_ROOT="$ROOT" python - <<'PY' || FAIL=1
+import io, json, os, re, sys
+
+root = os.environ.get("PARK_ROOT") or os.getcwd()
+with io.open(os.path.join(root, "factory-model", "isa95-vla.json"),
+             encoding="utf-8") as fh:
+    model = json.load(fh)
+try:
+    with io.open(os.path.join(root, "docker-compose.park.yml"),
+                 encoding="utf-8") as fh:
+        compose = fh.read()
+except IOError:
+    print("[check] OVERGESLAGEN: docker-compose.park.yml bestaat nog niet")
+    sys.exit(0)
+
+bad = []
+lines = [ln for site in model["enterprise"]["sites"]
+         for ln in site.get("lines", [])]
+for line in lines:
+    for area in line.get("areas", []):
+        for wc in area.get("work_centers", []):
+            park = wc.get("park")
+            if not park:
+                continue
+            proto = park.get("protocol")
+            if proto not in ("modbus-tcp", "rest"):
+                continue
+            env = wc["equipment_id"].replace("-", "_").upper()
+            host = park["container_name"]
+            key = ("MODBUS_HOST_%s" % env) if proto == "modbus-tcp" \
+                  else ("REST_URL_%s" % env)
+            m = re.search(r"^\s*%s:\s*(\S+)\s*$" % re.escape(key), compose,
+                          re.M)
+            if not m:
+                bad.append("%s: %s ontbreekt in docker-compose.park.yml"
+                           % (wc["equipment_id"], key))
+            elif host not in m.group(1):
+                bad.append("%s: %s wijst naar %s, moet %s zijn"
+                           % (wc["equipment_id"], key, m.group(1), host))
+
+if bad:
+    print("[check] FOUT: de poller kan deze machines niet bereiken:")
+    for b in bad:
+        print("        %s" % b)
+    sys.exit(1)
+print("[check] OK: elke gepollde machine heeft een expliciete host")
+PY
+
 if [ "$FAIL" -eq 0 ]; then
   echo "[check] ALLES OK"
   exit 0

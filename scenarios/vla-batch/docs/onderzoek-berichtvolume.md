@@ -67,7 +67,81 @@ Script: `scratchpad/rate_experiment.py` uit de sessie van 2026-08-09; de kern is
 twee tellers over hetzelfde venster, een aan de schrijfkant en een aan de
 subscription-kant.
 
+## BEWEZEN op 2026-08-11 — lees dit eerst
+
+Hypothese 3 klopt, en het bewijs is korter dan het onderzoek eronder. Vier
+machines draaiden naast elkaar met **hetzelfde 30-slots sjabloon** maar via
+verschillende transporten. Dat is een gecontroleerd experiment zonder dat je
+iets hoeft te stoppen: het begrote budget is ~6 msg/s per machine.
+
+| machine | transport | gemeten | tegen budget |
+|---|---|---:|---:|
+| `filler-01` | MQTT, de sim publiceert zelf | **6,5 /s** | 1,1× |
+| `blend-tank-01` | Modbus via `park-poller` | 58,0 /s | 9,7× |
+| `separator-01` | OPC UA via MonsterMQ | 35,5 /s | 5,9× |
+| `pasteuriser-01` | OPC-DA via MonsterMQ | 125,1 /s | 20,8× |
+
+De enige machine die zijn eigen berichten verstuurt zit **exact op het budget**.
+Alles wat door een verzamelaar gaat is 6 tot 21 keer over. Het sjabloon,
+de fysica en de sampling classes zijn identiek, dus die vallen af als oorzaak.
+
+**De rokende revolver.** Eén adres van `separator-01` over 15 seconden:
+
+```
+raw/vla-park/separator-01/Machine.Process.Rpm   264 berichten, 16 verschillende waarden
+
+{"value":5764.1,"timestamp":"2026-08-11T02:18:51.765420Z","status":0}
+{"value":5764.1,"timestamp":"2026-08-11T02:18:51.765420Z","status":0}
+{"value":5764.1,"timestamp":"2026-08-11T02:18:51.765420Z","status":0}
+```
+
+Niet alleen dezelfde waarde: **hetzelfde brontijdstempel**. Dat is geen nieuwe
+meting, dat is dezelfde sample die opnieuw de bus op gaat. 264 publicaties op
+16 echte samples is een factor 16,5. De 16 samples in 15 s kloppen precies met
+de `fast`-klasse van 1 Hz, dus de sim doet het goed en de verzamelaar niet.
+
+**Er is geen knop.** `subscriptionSamplingInterval` staat al op 1000 ms en doet
+aantoonbaar niets aan het aantal publicaties. Het schema van MonsterMQ heeft per
+adres maar één relevante optie, `publishMode`, en die kent alleen `SINGLE` en
+`SEPARATE`: dat gaat over de vorm van het topic, niet over de frequentie. Er is
+dus geen instelling die dit temt. De keuze ligt bij ons:
+
+1. **Laten staan en het als les gebruiken.** 287 msg/s ruw tegen 11,4 canoniek is
+   precies wat een naïeve verzamelaar met je bus doet, en waarom de deadband in
+   de conditioner geen luxe is. TDengine merkt er niets van; alleen de broker
+   betaalt (7,1% CPU van 2 vCPU bij vier machines).
+2. **`RAW_PUBLISH=mqtt` op de OPC-machines.** De sim publiceert dan zelf, zoals
+   `filler-01`, en je zit meteen op het budget. Kost je wel het OPC-UA-ingestpad,
+   en dat is een dragend deel van het verhaal.
+3. **De poller repareren.** Die 58 msg/s van `blend-tank-01` is van onszelf:
+   `park-poller` leest elke seconde alle registers plus de `.Q`-companions en
+   publiceert alles, ongeacht de sampling class of of er iets veranderd is. Dit
+   is de enige van de drie die volledig in eigen beheer is.
+
+Voor twaalf machines is 1 alleen houdbaar als de broker het trekt; meet dat
+voordat je opschaalt.
+
+## Terzijde, gevonden tijdens dezelfde meting: een stille poller
+
+`blend-tank-01` stond op **0 msg/s** en had nog nooit een byte geleverd. De
+container draaide gezond, de Modbus-server luisterde keurig op 5020, en de
+conditioner meldde 0 ongemapte topics. Alles groen.
+
+De poller verbond met `blend-tank-01:5020`, maar de container heet
+`vla-blend-tank-01`. De fallback in `poller.py` is het kale `equipment_id` en de
+generator gaf de containernaam nooit mee. Modbus en REST pushen niet, dus een
+poller die niets kan bereiken doet precies niets: geen crash, geen restart-loop,
+geen ongemapt topic. **Stilte lijkt op een machine die stilstaat.**
+
+Gerepareerd in `gen-park.py` (de compose krijgt nu `MODBUS_HOST_<X>` en
+`REST_URL_<X>` uit `container_name` in het model) met gate 5 in
+`check-generated.sh` eromheen, die zowel op een ontbrekende als op een verkeerde
+host faalt. Het is geen toeval dat dit pas bij een volumemeting opviel: er was
+geen enkel ander signaal.
+
 ## Hypothese 3: MonsterMQ's eigen OPC-UA-client — AANGEWEZEN, NIET BEWEZEN
+
+> Achtergrond. Hierboven staat de uitkomst; hieronder staat hoe we er kwamen.
 
 Wat overblijft. Het lokale experiment gebruikte een **asyncua**-client; MonsterMQ
 gebruikt zijn eigen implementatie (Eclipse Milo, Kotlin). Als die per

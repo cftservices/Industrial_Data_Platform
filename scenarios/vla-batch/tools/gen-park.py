@@ -964,6 +964,19 @@ def compose(all_tags):
         a("      RAW_ROOT: raw/vla-park")
         a("      MODBUS_PORT: \"5020\"")
         a("      POLL_INTERVAL_S: \"1.0\"")
+        # De poller verbindt met CONTAINERS, niet met machines. Docker resolvet
+        # de containernaam uit het model, en die is niet gelijk aan het
+        # equipment_id. Dit moet dus expliciet mee: de fallback in poller.py is
+        # het kale equipment_id, dat nergens naar resolvet. Gevolg was dat
+        # blend-tank-01 nooit een byte heeft geleverd zonder dat iets faalde,
+        # want een stille poller lijkt op een machine die niets doet.
+        for w in pollable:
+            env = w["equipment_id"].replace("-", "_").upper()
+            host = w["park"]["container_name"]
+            if w["park"]["protocol"] == "modbus-tcp":
+                a("      MODBUS_HOST_%s: %s" % (env, host))
+            else:
+                a("      REST_URL_%s: http://%s:8000" % (env, host))
         a("    volumes:")
         a("      - ./scenarios/vla-batch/factory-model:/model:ro")
         a("    mem_limit: 128m")
