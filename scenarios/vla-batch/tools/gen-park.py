@@ -532,6 +532,25 @@ def unit_yaml(line, area, wc, tags, rules, template, profiles):
     a("  keepalive_s: %d" % template["keepalive_s"])
     a("")
 
+    by = park.get("tdengine_bypass")
+    if by:
+        # Het anti-patroon, met opzet. Deze machine schrijft ZELF line protocol
+        # de historian in, langs de bus en langs de modellaag heen. Dat is de
+        # scherpste vijf seconden van de demo: de reeks staat er, en verder
+        # niets. Geen eenheid, geen kwaliteit, geen asset, geen signal_uuid,
+        # niet te koppelen aan een batch.
+        #
+        # Dit blok stond wel in het model maar werd nooit uitgeschreven, dus
+        # het pad was in de praktijk uitgeschakeld en idp_bypass bleef leeg.
+        # Er is GEEN wachtwoord in dit bestand: dat komt uit de omgeving, want
+        # een gegenereerd artefact gaat de repo in.
+        a("# %s" % by["why"])
+        a("tdengine_bypass:")
+        a("  enabled: %s" % yaml_scalar(bool(by.get("enabled"))))
+        a("  database: %s" % by.get("database", "idp_bypass"))
+        a("  url: %s" % by["url"])
+        a("")
+
     fol = park.get("follow")
     if fol:
         a("# Deze machine LOOPT MEE met de batch op de monoliet. Hij is geen")
@@ -930,6 +949,16 @@ def compose(all_tags):
         a("      MQTT_HOST: monstermq")
         a("      MQTT_PORT: \"1883\"")
         a("      LOG_LEVEL: ${PARK_LOG_LEVEL:-INFO}")
+        if park.get("tdengine_bypass"):
+            # Het bypass-pad schrijft rechtstreeks in TDengine en heeft dus een
+            # wachtwoord nodig. Dat komt uit .env op de VPS en staat bewust NIET
+            # in de unit-config, want die is gegenereerd en gaat de repo in.
+            # TD_USER en TD_PASS, niet TD_PASSWORD: dat is de naam die de rest
+            # van de stack al gebruikt en die op de VPS in .env staat. Een
+            # eigen variabelenaam verzinnen valt stil terug op de default en
+            # dan werkt het pad niet, zonder dat iets faalt.
+            a("      TD_BYPASS_USER: ${TD_USER:-root}")
+            a("      TD_BYPASS_PASSWORD: ${TD_PASS:-taosdata}")
         a("    volumes:")
         a("      - ./scenarios/vla-batch/park-sim/units:/units:ro")
         # GEMETEN op de VPS, niet begroot: een asyncua-server kost ~92 MiB en

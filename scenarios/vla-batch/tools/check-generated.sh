@@ -210,6 +210,62 @@ if bad:
 print("[check] OK: elke gepollde machine heeft een expliciete host")
 PY
 
+# -------------------- 6. wat het model verklaart, staat ook in de unit-config
+# Het model had voor bottle-filler-01 een tdengine_bypass-blok, maar de
+# generator schreef het nooit uit. Gevolg: het anti-patroon stond stil
+# uitgeschakeld en idp_bypass bleef leeg, terwijl model, code en documentatie
+# alle drie beweerden dat het pad bestond. Niets faalde. Dit is dezelfde
+# klasse als de stille poller: iets dat verklaard is maar niet aangesloten.
+echo "[check] verklaarde bypass-paden zijn ook aangesloten..."
+PARK_ROOT="$ROOT" python - <<'PY' || FAIL=1
+import io, json, os, re, sys
+
+root = os.environ.get("PARK_ROOT") or os.getcwd()
+with io.open(os.path.join(root, "factory-model", "isa95-vla.json"),
+             encoding="utf-8") as fh:
+    model = json.load(fh)
+
+bad = []
+found = 0
+for site in model["enterprise"]["sites"]:
+    for line in site.get("lines", []):
+        for area in line.get("areas", []):
+            for wc in area.get("work_centers", []):
+                by = (wc.get("park") or {}).get("tdengine_bypass")
+                if not by or not by.get("enabled"):
+                    continue
+                found += 1
+                path = os.path.join(root, "park-sim", "units",
+                                    "%s.yaml" % wc["equipment_id"])
+                try:
+                    with io.open(path, encoding="utf-8") as fh:
+                        y = fh.read()
+                except IOError:
+                    bad.append("%s: unit-yaml ontbreekt" % wc["equipment_id"])
+                    continue
+                if not re.search(r"^tdengine_bypass:", y, re.M):
+                    bad.append("%s: model verklaart tdengine_bypass, "
+                               "de unit-yaml niet" % wc["equipment_id"])
+                elif not re.search(r"^\s+enabled:\s*true", y, re.M):
+                    bad.append("%s: bypass staat uit in de unit-yaml"
+                               % wc["equipment_id"])
+                if re.search(r"^\s+database:\s*idp_park", y, re.M):
+                    bad.append("%s: bypass schrijft naar idp_park; dan is het "
+                               "tegenvoorbeeld zijn eigen argument kwijt"
+                               % wc["equipment_id"])
+                if re.search(r"(?i)^\s+password:", y, re.M):
+                    bad.append("%s: wachtwoord in een GEGENEREERD bestand; dat "
+                               "gaat de repo in. Gebruik TD_BYPASS_PASSWORD."
+                               % wc["equipment_id"])
+
+if bad:
+    print("[check] FOUT:")
+    for b in bad:
+        print("        %s" % b)
+    sys.exit(1)
+print("[check] OK: %d bypass-pad(en) verklaard en aangesloten" % found)
+PY
+
 if [ "$FAIL" -eq 0 ]; then
   echo "[check] ALLES OK"
   exit 0

@@ -39,6 +39,12 @@ sim:
     onchange: null
   keepalive_s: 60
 
+# Deze machine staat AL in de historian, en juist daarom is hij het tegenvoorbeeld: geen eenheid, geen kwaliteit, geen asset, geen signal_uuid, en niet te koppelen aan een batch. Landt in idp_bypass en NOOIT in idp_park, anders is de demo zijn eigen tegenvoorbeeld kwijt.
+tdengine_bypass:
+  enabled: true
+  database: idp_bypass
+  url: http://vla-tdengine:6041/influxdb/v1/write
+
 # Deze machine LOOPT MEE met de batch op de monoliet. Hij is geen
 # tweede fabriek: de monoliet-waarden zijn stuurwaarden, en de eigen
 # fysica bepaalt met welke traagheid, ruis en storing hij ze haalt.

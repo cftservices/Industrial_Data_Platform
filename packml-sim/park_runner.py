@@ -297,7 +297,15 @@ def main():
         if msgs and (surface is not None or modbus is not None
                      or rest is not None or sqlw is not None
                      or bypass.enabled):
-            native = [(t.rsplit("/", 1)[1],
+            # Van het topic terug naar de NATIVE naam. Niet met rsplit("/", 1):
+            # vendor-d noemt zijn punten `sensors/stateCurrent`, dus die geeft
+            # `stateCurrent` en dat bestaat nergens. Het REST-oppervlak
+            # antwoordde daardoor "no value yet" op elk punt en het bypass-pad
+            # schreef onder namen die niemand kent. Dat viel niet op omdat de
+            # andere vendor-d-machine (filler-01) via MQTT gaat en het volledige
+            # topic publiceert, dus deze tak nooit raakt.
+            _pfx = len(machine.raw_root) + 1
+            native = [(t[_pfx:],
                        json.loads(p).get("v") if p.startswith("{") else p)
                       for t, p in msgs]
             if surface is not None:

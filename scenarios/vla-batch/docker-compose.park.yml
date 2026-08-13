@@ -229,6 +229,8 @@ services:
       MQTT_HOST: monstermq
       MQTT_PORT: "1883"
       LOG_LEVEL: ${PARK_LOG_LEVEL:-INFO}
+      TD_BYPASS_USER: ${TD_USER:-root}
+      TD_BYPASS_PASSWORD: ${TD_PASS:-taosdata}
     volumes:
       - ./scenarios/vla-batch/park-sim/units:/units:ro
     mem_limit: 96m
