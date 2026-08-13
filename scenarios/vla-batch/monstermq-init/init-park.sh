@@ -29,7 +29,11 @@ TOTAL_OK=0; TOTAL_FAIL=0
 # profiel vendor-a, protocol opc-da
 EXISTS=$(gql "{opcUaDevices{name}}")
 case "$EXISTS" in
-  *'"intake-silo-01"'*) echo "[park-init] intake-silo-01 bestaat al, skip." ;;
+  *'"intake-silo-01"'*)
+    echo "[park-init] intake-silo-01 bestaat al; enabled afdwingen."
+    ON=$(gql "mutation{opcUaDevice{toggle(name:\\\"intake-silo-01\\\",enabled:true){success}}}")
+    echo "[park-init] enable intake-silo-01: $ON"
+    ;;
   *)
     ADD=$(gql "mutation{opcUaDevice{add(input:{name:\\\"intake-silo-01\\\",namespace:\\\"raw/vla-park\\\",nodeId:\\\"local\\\",enabled:true,config:{endpointUrl:\\\"opc.tcp://vla-intake-silo-01:4840/VendorA\\\",securityPolicy:None,subscriptionSamplingInterval:1000.0}}){success errors}}}")
     echo "[park-init] add intake-silo-01: $ADD"
@@ -114,7 +118,11 @@ esac
 # profiel vendor-b, protocol opc-ua
 EXISTS=$(gql "{opcUaDevices{name}}")
 case "$EXISTS" in
-  *'"separator-01"'*) echo "[park-init] separator-01 bestaat al, skip." ;;
+  *'"separator-01"'*)
+    echo "[park-init] separator-01 bestaat al; enabled afdwingen."
+    ON=$(gql "mutation{opcUaDevice{toggle(name:\\\"separator-01\\\",enabled:true){success}}}")
+    echo "[park-init] enable separator-01: $ON"
+    ;;
   *)
     ADD=$(gql "mutation{opcUaDevice{add(input:{name:\\\"separator-01\\\",namespace:\\\"raw/vla-park\\\",nodeId:\\\"local\\\",enabled:true,config:{endpointUrl:\\\"opc.tcp://vla-separator-01:4840/VendorB\\\",securityPolicy:None,subscriptionSamplingInterval:1000.0}}){success errors}}}")
     echo "[park-init] add separator-01: $ADD"
@@ -169,7 +177,11 @@ esac
 # profiel vendor-b, protocol opc-ua
 EXISTS=$(gql "{opcUaDevices{name}}")
 case "$EXISTS" in
-  *'"homogeniser-01"'*) echo "[park-init] homogeniser-01 bestaat al, skip." ;;
+  *'"homogeniser-01"'*)
+    echo "[park-init] homogeniser-01 bestaat al; enabled afdwingen."
+    ON=$(gql "mutation{opcUaDevice{toggle(name:\\\"homogeniser-01\\\",enabled:true){success}}}")
+    echo "[park-init] enable homogeniser-01: $ON"
+    ;;
   *)
     ADD=$(gql "mutation{opcUaDevice{add(input:{name:\\\"homogeniser-01\\\",namespace:\\\"raw/vla-park\\\",nodeId:\\\"local\\\",enabled:true,config:{endpointUrl:\\\"opc.tcp://vla-homogeniser-01:4840/VendorB\\\",securityPolicy:None,subscriptionSamplingInterval:1000.0}}){success errors}}}")
     echo "[park-init] add homogeniser-01: $ADD"
@@ -224,7 +236,11 @@ esac
 # profiel vendor-a, protocol opc-da
 EXISTS=$(gql "{opcUaDevices{name}}")
 case "$EXISTS" in
-  *'"pasteuriser-01"'*) echo "[park-init] pasteuriser-01 bestaat al, skip." ;;
+  *'"pasteuriser-01"'*)
+    echo "[park-init] pasteuriser-01 bestaat al; enabled afdwingen."
+    ON=$(gql "mutation{opcUaDevice{toggle(name:\\\"pasteuriser-01\\\",enabled:true){success}}}")
+    echo "[park-init] enable pasteuriser-01: $ON"
+    ;;
   *)
     ADD=$(gql "mutation{opcUaDevice{add(input:{name:\\\"pasteuriser-01\\\",namespace:\\\"raw/vla-park\\\",nodeId:\\\"local\\\",enabled:true,config:{endpointUrl:\\\"opc.tcp://vla-pasteuriser-01:4840/VendorA\\\",securityPolicy:None,subscriptionSamplingInterval:1000.0}}){success errors}}}")
     echo "[park-init] add pasteuriser-01: $ADD"
@@ -309,7 +325,11 @@ esac
 # profiel vendor-a, protocol opc-ua
 EXISTS=$(gql "{opcUaDevices{name}}")
 case "$EXISTS" in
-  *'"cip-skid-01"'*) echo "[park-init] cip-skid-01 bestaat al, skip." ;;
+  *'"cip-skid-01"'*)
+    echo "[park-init] cip-skid-01 bestaat al; enabled afdwingen."
+    ON=$(gql "mutation{opcUaDevice{toggle(name:\\\"cip-skid-01\\\",enabled:true){success}}}")
+    echo "[park-init] enable cip-skid-01: $ON"
+    ;;
   *)
     ADD=$(gql "mutation{opcUaDevice{add(input:{name:\\\"cip-skid-01\\\",namespace:\\\"raw/vla-park\\\",nodeId:\\\"local\\\",enabled:true,config:{endpointUrl:\\\"opc.tcp://vla-cip-skid-01:4840/VendorA\\\",securityPolicy:None,subscriptionSamplingInterval:1000.0}}){success errors}}}")
     echo "[park-init] add cip-skid-01: $ADD"

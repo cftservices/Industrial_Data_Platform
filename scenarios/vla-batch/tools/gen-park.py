@@ -766,7 +766,20 @@ def init_park(model, template, profiles, all_tags):
         a("# profiel %s, protocol %s" % (park["vendor_profile"], park["protocol"]))
         a('EXISTS=$(gql "{opcUaDevices{name}}")')
         a('case "$EXISTS" in')
-        a("  *'\"%s\"'*) echo \"[park-init] %s bestaat al, skip.\" ;;" % (dev, dev))
+        # 'Bestaat al' is niet hetzelfde als 'staat aan'. Een device kan
+        # geregistreerd zijn en toch op enabled:false staan; skippen laat het
+        # dan stil uit staan, zonder ingest en zonder foutmelding.
+        # Zo gebeurde het in augustus 2026: cip-skid-01, homogeniser-01 en
+        # intake-silo-01 zijn uitgezet omdat hun sims (profiel "park", niet
+        # "park-slim") niet draaien en de connector anders eindeloos
+        # UnknownHostException logt, 2 GB per dag. Wie daarna het volledige
+        # park opzet, kreeg met de oude skip-tak drie stille machines.
+        a("  *'\"%s\"'*)" % dev)
+        a('    echo "[park-init] %s bestaat al; enabled afdwingen."' % dev)
+        a('    ON=$(gql "mutation{opcUaDevice{toggle(name:\\\\\\"%s\\\\\\",'
+          'enabled:true){success}}}")' % dev)
+        a('    echo "[park-init] enable %s: $ON"' % dev)
+        a("    ;;")
         a("  *)")
         a('    ADD=$(gql "mutation{opcUaDevice{add(input:{name:\\\\\\"%s\\\\\\",'
           'namespace:\\\\\\"raw/vla-park\\\\\\",nodeId:\\\\\\"local\\\\\\",enabled:true,'
