@@ -61,6 +61,18 @@ END = "# END GENERATED"
 # stilzwijgend opnieuw en dat merk je pas als een trend een gat heeft.
 UUID_NS = uuid.UUID("6f9d2a1e-0c3b-4d7a-9e14-8b2c4f6a1d30")
 
+# Elke container krijgt een expliciete log-cap, direct achter restart:.
+# De daemon-default uit /etc/docker/daemon.json is op de VPS nooit ingelezen
+# (dockerd draait sinds voor dat bestand geschreven werd), dus containers
+# loggen daar ongelimiteerd. De sims logden op INFO elke asyncua publish-ack:
+# 25 MB per dag per machine, en json-logs van meerdere GB per container.
+# Dit blok maakt de cap onafhankelijk van de daemon-instelling.
+LOG_CAP = ("\n    logging:"
+           "\n      driver: json-file"
+           "\n      options:"
+           "\n        max-size: \"10m\""
+           "\n        max-file: \"3\"")
+
 
 # --------------------------------------------------------------------------- io
 
@@ -942,7 +954,7 @@ def compose(all_tags):
         a("      dockerfile: Dockerfile")
         a("    image: techflow/packml-sim:latest")
         a("    container_name: %s" % name)
-        a("    restart: unless-stopped")
+        a("    restart: unless-stopped" + LOG_CAP)
         a("    entrypoint: [\"python\", \"park_runner.py\"]")
         a("    environment:")
         a("      UNIT_CONFIG: /units/%s.yaml" % wc["equipment_id"])
@@ -990,7 +1002,7 @@ def compose(all_tags):
         a("      dockerfile: Dockerfile")
         a("    image: techflow/vla-park-poller:latest")
         a("    container_name: vla-park-poller")
-        a("    restart: unless-stopped")
+        a("    restart: unless-stopped" + LOG_CAP)
         a("    environment:")
         a("      MQTT_HOST: monstermq")
         a("      MQTT_PORT: \"1883\"")
@@ -1037,7 +1049,7 @@ def compose(all_tags):
         a("  vla-park-db:")
         a("    image: postgres:16-alpine")
         a("    container_name: vla-park-db")
-        a("    restart: unless-stopped")
+        a("    restart: unless-stopped" + LOG_CAP)
         a("    environment:")
         a("      POSTGRES_DB: vendor_e")
         a("      POSTGRES_USER: vendor_e")
@@ -1062,7 +1074,7 @@ def compose(all_tags):
         a("      dockerfile: Dockerfile")
         a("    image: techflow/vla-park-gateway:latest")
         a("    container_name: vla-park-gateway")
-        a("    restart: unless-stopped")
+        a("    restart: unless-stopped" + LOG_CAP)
         a("    environment:")
         a("      MQTT_HOST: monstermq")
         a("      MQTT_PORT: \"1883\"")
@@ -1112,7 +1124,7 @@ def compose(all_tags):
     a("      dockerfile: Dockerfile")
     a("    image: techflow/vla-park-conditioner:latest")
     a("    container_name: vla-park-conditioner")
-    a("    restart: unless-stopped")
+    a("    restart: unless-stopped" + LOG_CAP)
     a("    environment:")
     a("      MQTT_HOST: monstermq")
     a("      MQTT_PORT: \"1883\"")
@@ -1143,7 +1155,7 @@ def compose(all_tags):
     a("      dockerfile: Dockerfile")
     a("    image: techflow/vla-park-scenario:latest")
     a("    container_name: vla-park-scenario")
-    a("    restart: unless-stopped")
+    a("    restart: unless-stopped" + LOG_CAP)
     a("    environment:")
     a("      MQTT_HOST: monstermq")
     a("      MQTT_PORT: \"1883\"")
@@ -1171,7 +1183,7 @@ def compose(all_tags):
     a("      dockerfile: Dockerfile")
     a("    image: techflow/vla-tdengine-bridge:latest")
     a("    container_name: vla-park-tdengine-bridge")
-    a("    restart: unless-stopped")
+    a("    restart: unless-stopped" + LOG_CAP)
     a("    environment:")
     a("      MQTT_HOST: monstermq")
     a("      MQTT_PORT: \"1883\"")

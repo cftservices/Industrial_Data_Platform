@@ -23,6 +23,11 @@ services:
     image: techflow/packml-sim:latest
     container_name: vla-intake-silo-01
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     entrypoint: ["python", "park_runner.py"]
     environment:
       UNIT_CONFIG: /units/intake-silo-01.yaml
@@ -48,6 +53,11 @@ services:
     image: techflow/packml-sim:latest
     container_name: vla-separator-01
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     entrypoint: ["python", "park_runner.py"]
     environment:
       UNIT_CONFIG: /units/separator-01.yaml
@@ -73,6 +83,11 @@ services:
     image: techflow/packml-sim:latest
     container_name: vla-homogeniser-01
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     entrypoint: ["python", "park_runner.py"]
     environment:
       UNIT_CONFIG: /units/homogeniser-01.yaml
@@ -98,6 +113,11 @@ services:
     image: techflow/packml-sim:latest
     container_name: vla-blend-tank-01
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     entrypoint: ["python", "park_runner.py"]
     environment:
       UNIT_CONFIG: /units/blend-tank-01.yaml
@@ -123,6 +143,11 @@ services:
     image: techflow/packml-sim:latest
     container_name: vla-pasteuriser-01
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     entrypoint: ["python", "park_runner.py"]
     environment:
       UNIT_CONFIG: /units/pasteuriser-01.yaml
@@ -148,6 +173,11 @@ services:
     image: techflow/packml-sim:latest
     container_name: vla-preheater-01
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     entrypoint: ["python", "park_runner.py"]
     environment:
       UNIT_CONFIG: /units/preheater-01.yaml
@@ -173,6 +203,11 @@ services:
     image: techflow/packml-sim:latest
     container_name: vla-plate-cooler-01
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     entrypoint: ["python", "park_runner.py"]
     environment:
       UNIT_CONFIG: /units/plate-cooler-01.yaml
@@ -198,6 +233,11 @@ services:
     image: techflow/packml-sim:latest
     container_name: vla-filler-01
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     entrypoint: ["python", "park_runner.py"]
     environment:
       UNIT_CONFIG: /units/filler-01.yaml
@@ -223,6 +263,11 @@ services:
     image: techflow/packml-sim:latest
     container_name: vla-bottle-filler-01
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     entrypoint: ["python", "park_runner.py"]
     environment:
       UNIT_CONFIG: /units/bottle-filler-01.yaml
@@ -250,6 +295,11 @@ services:
     image: techflow/packml-sim:latest
     container_name: vla-case-packer-01
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     entrypoint: ["python", "park_runner.py"]
     environment:
       UNIT_CONFIG: /units/case-packer-01.yaml
@@ -275,6 +325,11 @@ services:
     image: techflow/packml-sim:latest
     container_name: vla-palletiser-01
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     entrypoint: ["python", "park_runner.py"]
     environment:
       UNIT_CONFIG: /units/palletiser-01.yaml
@@ -300,6 +355,11 @@ services:
     image: techflow/packml-sim:latest
     container_name: vla-cip-skid-01
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     entrypoint: ["python", "park_runner.py"]
     environment:
       UNIT_CONFIG: /units/cip-skid-01.yaml
@@ -329,6 +389,11 @@ services:
     image: techflow/vla-park-poller:latest
     container_name: vla-park-poller
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       MQTT_HOST: monstermq
       MQTT_PORT: "1883"
@@ -361,6 +426,11 @@ services:
     image: postgres:16-alpine
     container_name: vla-park-db
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       POSTGRES_DB: vendor_e
       POSTGRES_USER: vendor_e
@@ -386,6 +456,11 @@ services:
     image: techflow/vla-park-gateway:latest
     container_name: vla-park-gateway
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       MQTT_HOST: monstermq
       MQTT_PORT: "1883"
@@ -434,6 +509,11 @@ services:
     image: techflow/vla-park-conditioner:latest
     container_name: vla-park-conditioner
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       MQTT_HOST: monstermq
       MQTT_PORT: "1883"
@@ -464,6 +544,11 @@ services:
     image: techflow/vla-park-scenario:latest
     container_name: vla-park-scenario
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       MQTT_HOST: monstermq
       MQTT_PORT: "1883"
@@ -491,6 +576,11 @@ services:
     image: techflow/vla-tdengine-bridge:latest
     container_name: vla-park-tdengine-bridge
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       MQTT_HOST: monstermq
       MQTT_PORT: "1883"
